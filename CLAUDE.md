@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Core Commands
-- `npm run dev` - Start development server on localhost:3000
+- `npm run dev` - Start development server on localhost:3001
 - `npm run build` - Build production version  
 - `npm run start` - Start production server
 - `npm run lint` - Run Next.js linting
