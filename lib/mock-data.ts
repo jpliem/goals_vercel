@@ -1,0 +1,152 @@
+import type { RequestWithDetails, UserRecord, Application } from "./database";
+
+export const mockUsers: UserRecord[] = [
+  {
+    id: "1",
+    email: "admin@company.com",
+    full_name: "Admin User",
+    password: "password123",
+    role: "Admin",
+    department: "IT",
+    skills: ["React", "Node.js"],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    email: "pic@company.com",
+    full_name: "PIC User",
+    password: "password123",
+    role: "PIC",
+    department: "IT",
+    skills: ["React", "Node.js"],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "3",
+    email: "requestor@company.com",
+    full_name: "Requestor User",
+    password: "password123",
+    role: "Requestor",
+    department: "Sales",
+    skills: [],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const mockApplications: Application[] = [
+  {
+    id: "1",
+    name: "Application 1",
+    description: "This is the first application",
+    context: "React, Node.js, PostgreSQL",
+    tech_lead_id: "2",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Application 2",
+    description: "This is the second application",
+    context: "Angular, Java, MySQL",
+    tech_lead_id: "2",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const mockRequests: RequestWithDetails[] = [
+  {
+    id: "1",
+    application_id: "1",
+    subject: "Request 1",
+    description: "This is the first request",
+    priority: "High",
+    status: "New",
+    request_type: "enhancement",
+    proposed_application_name: null,
+    requestor_id: "3",
+    current_pic_id: null,
+    tech_lead_id: "2",
+    executor_id: null,
+    assigned_by: null,
+    tech_lead_notes: null,
+    requested_deadline: null,
+    adjusted_deadline: null,
+    internal_deadline: null,
+    previous_status: null,
+    pic_assignment_history: [],
+    clarification_requests: [],
+    workflow_history: [],
+    ai_analysis: null,
+    ai_analysis_status: "pending",
+    rejection_reason: null,
+    rejection_type: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    application: mockApplications[0],
+    requestor: mockUsers[2],
+    current_pic: null,
+    tech_lead: mockUsers[1],
+    executor: null,
+    assigned_by_user: null,
+    comments: [],
+    attachments: [],
+    executors: [],
+  },
+  {
+    id: "2",
+    application_id: null,
+    subject: "Request 2",
+    description: "This is the second request",
+    priority: "Medium",
+    status: "New",
+    request_type: "new_application",
+    proposed_application_name: "New App",
+    requestor_id: "3",
+    current_pic_id: null,
+    tech_lead_id: null,
+    executor_id: null,
+    assigned_by: null,
+    tech_lead_notes: null,
+    requested_deadline: null,
+    adjusted_deadline: null,
+    internal_deadline: null,
+    previous_status: null,
+    pic_assignment_history: [],
+    clarification_requests: [],
+    workflow_history: [],
+    ai_analysis: null,
+    ai_analysis_status: "pending",
+    rejection_reason: null,
+    rejection_type: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    application: null,
+    requestor: mockUsers[2],
+    current_pic: null,
+    tech_lead: null,
+    executor: null,
+    assigned_by_user: null,
+    comments: [],
+    attachments: [],
+    executors: [],
+  },
+];
+
+export function findMockUserByEmail(email: string): UserRecord | undefined {
+  return mockUsers.find(user => user.email === email);
+}
+
+export function findMockRequestById(id: string): RequestWithDetails | undefined {
+  return mockRequests.find(request => request.id === id);
+}
+
+export function getMockPICUsers(): UserRecord[] {
+  return mockUsers.filter(user => user.role === "PIC" || user.role === "Admin");
+}
