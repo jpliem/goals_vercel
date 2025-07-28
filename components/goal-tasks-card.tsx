@@ -48,6 +48,7 @@ interface GoalTask {
   description: string | null
   priority: 'Low' | 'Medium' | 'High' | 'Critical'
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  pdca_phase: 'Plan' | 'Do' | 'Check' | 'Act'
   assigned_to: string | null
   assigned_by: string | null
   department: string | null
@@ -82,9 +83,11 @@ interface GoalTasksCardProps {
   users: UserRecord[]
   isOwner: boolean
   isAssignee: boolean
+  currentGoalStatus: string
+  goalDepartment: string
 }
 
-export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee }: GoalTasksCardProps) {
+export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee, currentGoalStatus, goalDepartment }: GoalTasksCardProps) {
   const [tasks, setTasks] = useState<GoalTask[]>([])
   const [stats, setStats] = useState<TaskStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -99,7 +102,8 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
     priority: 'Medium' as const,
     assigned_to: "unassigned",
     due_date: "",
-    estimated_hours: ""
+    estimated_hours: "",
+    pdca_phase: currentGoalStatus as 'Plan' | 'Do' | 'Check' | 'Act'
   })
 
   // Load tasks and stats
@@ -112,7 +116,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
       ])
 
       if (tasksResult.success && tasksResult.data) {
-        setTasks(tasksResult.data)
+        setTasks(tasksResult.data as GoalTask[])
       }
 
       if (statsResult.success && statsResult.data) {
@@ -145,6 +149,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
       formData.append("assigned_to", newTask.assigned_to === "unassigned" ? "" : newTask.assigned_to)
       formData.append("due_date", newTask.due_date)
       formData.append("estimated_hours", newTask.estimated_hours || "0")
+      formData.append("pdca_phase", newTask.pdca_phase)
 
       const result = await createTask(formData)
       
@@ -157,7 +162,8 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
           priority: 'Medium',
           assigned_to: "unassigned",
           due_date: "",
-          estimated_hours: ""
+          estimated_hours: "",
+          pdca_phase: currentGoalStatus as 'Plan' | 'Do' | 'Check' | 'Act'
         })
         loadTasks()
       } else {
@@ -241,7 +247,8 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
     return new Date(dueDate) < new Date()
   }
 
-  const canManageTasks = isOwner || isAssignee || currentUser.role === 'Admin'
+  const canManageTasks = isOwner || isAssignee || currentUser.role === 'Admin' ||
+                        (currentUser.role === 'Head' && goalDepartment === currentUser.department)
 
   if (loading) {
     return (
@@ -321,99 +328,139 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
                 <div className="text-xs mt-1">Break down this goal into specific tasks</div>
               </div>
             ) : (
-              <div className="space-y-2">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`border rounded-lg p-3 ${
-                      isOverdue(task.due_date) && task.status !== 'completed' 
-                        ? 'border-red-200 bg-red-50' 
-                        : 'border-gray-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {getStatusIcon(task.status)}
-                          <span className="font-medium">{task.title}</span>
-                          <Badge className={getPriorityColor(task.priority)}>
-                            {task.priority}
-                          </Badge>
-                          {isOverdue(task.due_date) && task.status !== 'completed' && (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertCircle className="w-3 h-3 mr-1" />
-                              Overdue
-                            </Badge>
-                          )}
+              <div className="space-y-4">
+                {/* Group tasks by PDCA phase */}
+                {['Plan', 'Do', 'Check', 'Act'].map(phase => {
+                  const phaseTasks = tasks.filter(task => task.pdca_phase === phase)
+                  if (phaseTasks.length === 0) return null
+                  
+                  return (
+                    <div key={phase} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <h5 className="font-semibold text-sm text-gray-800">{phase} Phase</h5>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${
+                          phase === 'Plan' ? 'bg-blue-100 text-blue-800' :
+                          phase === 'Do' ? 'bg-purple-100 text-purple-800' :
+                          phase === 'Check' ? 'bg-orange-100 text-orange-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {phaseTasks.length} task{phaseTasks.length !== 1 ? 's' : ''}
                         </div>
+                      </div>
+                      {phaseTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`border rounded-lg p-3 ml-4 ${
+                            isOverdue(task.due_date) && task.status !== 'completed' 
+                              ? 'border-red-200 bg-red-50' 
+                              : 'border-gray-200 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                {getStatusIcon(task.status)}
+                                <span className="font-medium">{task.title}</span>
+                                <Badge className={getPriorityColor(task.priority)}>
+                                  {task.priority}
+                                </Badge>
+                                {isOverdue(task.due_date) && task.status !== 'completed' && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    Overdue
+                                  </Badge>
+                                )}
+                              </div>
 
-                        <div className="text-sm text-gray-600 space-y-1">
-                          {task.description && (
-                            <p className="text-gray-700">{task.description}</p>
-                          )}
-                          <div className="flex items-center gap-4">
-                            {task.assigned_user && (
-                              <div className="flex items-center gap-1">
-                                <User className="w-3 h-3" />
-                                <span>{task.assigned_user.full_name}</span>
+                              <div className="text-sm text-gray-600 space-y-1">
+                                {task.description && (
+                                  <p className="text-gray-700">{task.description}</p>
+                                )}
+                                <div className="flex items-center gap-4">
+                                  {task.assigned_user && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-3 h-3" />
+                                      <span>{task.assigned_user.full_name}</span>
+                                    </div>
+                                  )}
+                                  {task.due_date && (
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3" />
+                                      <span>{formatDate(task.due_date)}</span>
+                                    </div>
+                                  )}
+                                  {task.estimated_hours > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{task.estimated_hours}h</span>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Completion Information */}
+                                {task.status === 'completed' && (
+                                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                                    <div className="text-xs text-green-800 font-medium mb-1">
+                                      ✓ Completed {task.completed_at && formatDate(task.completed_at)}
+                                      {task.completed_by && (
+                                        <span className="ml-1">
+                                          by {users.find(u => u.id === task.completed_by)?.full_name || 'Unknown'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {task.completion_notes && (
+                                      <div className="text-xs text-gray-700 mt-1">
+                                        <strong>Notes:</strong> {task.completion_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {task.due_date && (
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                <span>{formatDate(task.due_date)}</span>
-                              </div>
-                            )}
-                            {task.estimated_hours > 0 && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span>{task.estimated_hours}h</span>
-                              </div>
+                            </div>
+
+                            {canManageTasks && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {task.status === 'pending' && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
+                                      disabled={actionLoading === task.id}
+                                    >
+                                      <Play className="w-4 h-4 mr-2" />
+                                      Start Task
+                                    </DropdownMenuItem>
+                                  )}
+                                  {task.status === 'in_progress' && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                                      disabled={actionLoading === task.id}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                                      Complete Task
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteTask(task.id)}
+                                    disabled={actionLoading === task.id}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete Task
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </div>
                         </div>
-                      </div>
-
-                      {canManageTasks && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {task.status === 'pending' && (
-                              <DropdownMenuItem
-                                onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
-                                disabled={actionLoading === task.id}
-                              >
-                                <Play className="w-4 h-4 mr-2" />
-                                Start Task
-                              </DropdownMenuItem>
-                            )}
-                            {task.status === 'in_progress' && (
-                              <DropdownMenuItem
-                                onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
-                                disabled={actionLoading === task.id}
-                              >
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Complete Task
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteTask(task.id)}
-                              disabled={actionLoading === task.id}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Task
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -514,6 +561,24 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee 
                   placeholder="0"
                   className="mt-1"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="task-phase">PDCA Phase</Label>
+                <Select 
+                  value={newTask.pdca_phase} 
+                  onValueChange={(value) => setNewTask(prev => ({ ...prev, pdca_phase: value as any }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Plan">Plan</SelectItem>
+                    <SelectItem value="Do">Do</SelectItem>
+                    <SelectItem value="Check">Check</SelectItem>
+                    <SelectItem value="Act">Act</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

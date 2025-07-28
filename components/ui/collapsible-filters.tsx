@@ -265,7 +265,7 @@ export function CollapsibleFilters({
                     <SelectItem value="all">All Departments</SelectItem>
                     {userProfile.role !== "Admin" && (
                       <SelectItem value="my-requests">
-                        {userProfile.role === "PIC" ? "My Assigned Tasks" : "My Requests Only"}
+                        {userProfile.role === "Head" ? "My Assigned Tasks" : "My Requests Only"}
                       </SelectItem>
                     )}
                     <SelectItem value="no-department">No Department</SelectItem>
@@ -315,8 +315,8 @@ export function CollapsibleFilters({
                 options={actualRequestors.map(user => ({ value: user.id, label: user.full_name }))}
                 selected={requestorFilter}
                 onSelectionChange={setRequestorFilter}
-                placeholder="Requestor"
-                allLabel="All Requestors"
+                placeholder="Owner"
+                allLabel="All Owners"
                 width="w-full"
               />
             </div>

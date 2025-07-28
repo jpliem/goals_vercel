@@ -95,6 +95,7 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
       department: string;
       due_date: string;
       estimated_hours: number;
+      pdca_phase: 'Plan' | 'Do' | 'Check' | 'Act';
     }[]
   })
   
@@ -112,7 +113,8 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
         assigned_to: "unassigned",
         department: prev.department,
         due_date: "",
-        estimated_hours: 0
+        estimated_hours: 0,
+        pdca_phase: 'Plan' as const
       }]
     }))
   }
@@ -690,6 +692,24 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                           </div>
 
                           <div>
+                            <Label className="text-xs text-gray-600">PDCA Phase</Label>
+                            <Select 
+                              value={task.pdca_phase} 
+                              onValueChange={(value) => updateTask(index, 'pdca_phase', value)}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Plan">Plan</SelectItem>
+                                <SelectItem value="Do">Do</SelectItem>
+                                <SelectItem value="Check">Check</SelectItem>
+                                <SelectItem value="Act">Act</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
                             <Label className="text-xs text-gray-600">Assign to</Label>
                             <Select 
                               value={task.assigned_to} 
@@ -724,20 +744,6 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                             />
                           </div>
 
-                          <div>
-                            <Label className="text-xs text-gray-600 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              Estimated Hours
-                            </Label>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={task.estimated_hours}
-                              onChange={(e) => updateTask(index, 'estimated_hours', parseInt(e.target.value) || 0)}
-                              className="h-8"
-                              placeholder="0"
-                            />
-                          </div>
                         </div>
 
                         <div>

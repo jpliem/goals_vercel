@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getUserNotifications, markAllNotificationsAsRead } from '@/lib/notifications'
+import { getUserNotifications, markAllNotificationsAsRead } from '@/lib/goal-notifications'
 
 export async function GET(request: NextRequest) {
   try {

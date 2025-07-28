@@ -5,7 +5,7 @@ export interface UserSession {
   id: string
   email: string
   full_name: string
-  role: "User" | "Admin"
+  role: "Admin" | "Head" | "Employee"
   department?: string
 }
 
@@ -39,13 +39,39 @@ export function isAdmin(userProfile: UserSession | null): boolean {
   return userProfile?.role === "Admin"
 }
 
-// Deprecated: Manager role removed - use hasDepartmentPermission instead
-export function isManager(userProfile: UserSession | null): boolean {
-  return false // Manager role no longer exists
+export function isHead(userProfile: UserSession | null): boolean {
+  return userProfile?.role === "Head"
 }
 
+export function isEmployee(userProfile: UserSession | null): boolean {
+  return userProfile?.role === "Employee"
+}
+
+// Deprecated: User role split into Head and Employee
 export function isUser(userProfile: UserSession | null): boolean {
-  return userProfile?.role === "User"
+  return userProfile?.role === "Head" || userProfile?.role === "Employee"
+}
+
+// Deprecated: Manager role removed - use isHead instead
+export function isManager(userProfile: UserSession | null): boolean {
+  return isHead(userProfile)
+}
+
+// Permission helper functions
+export function canCreateGoals(userProfile: UserSession | null): boolean {
+  return isAdmin(userProfile) || isHead(userProfile)
+}
+
+export function canManageAllGoals(userProfile: UserSession | null): boolean {
+  return isAdmin(userProfile)
+}
+
+export function canManageDepartmentGoals(userProfile: UserSession | null): boolean {
+  return isAdmin(userProfile) || isHead(userProfile)
+}
+
+export function canOnlyViewAssignedTasks(userProfile: UserSession | null): boolean {
+  return isEmployee(userProfile)
 }
 
 export async function requireAuth(): Promise<UserSession> {

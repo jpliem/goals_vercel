@@ -76,7 +76,7 @@ export function UserManagementTable({ users, currentUserId }: UserManagementTabl
 
     setLoading(selectedUser.id)
     try {
-      const result = await updateUserRole(selectedUser.id, selectedUser.newRole as "User" | "Admin")
+      const result = await updateUserRole(selectedUser.id, selectedUser.newRole as "Employee" | "Head" | "Admin")
       
       if (result.error) {
         toast.error("Failed to update role", {
@@ -148,10 +148,18 @@ export function UserManagementTable({ users, currentUserId }: UserManagementTabl
         </Badge>
       )
     }
+    if (role === "Head") {
+      return (
+        <Badge className="gap-1 bg-green-100 text-green-800 border-green-200">
+          <UserCheck className="w-3 h-3" />
+          Head
+        </Badge>
+      )
+    }
     return (
       <Badge variant="secondary" className="gap-1">
         <User className="w-3 h-3" />
-        User
+        Employee
       </Badge>
     )
   }
@@ -272,7 +280,8 @@ export function UserManagementTable({ users, currentUserId }: UserManagementTabl
                       )}
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="User">User</SelectItem>
+                      <SelectItem value="Employee">Employee</SelectItem>
+                      <SelectItem value="Head">Head</SelectItem>
                       <SelectItem value="Admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
@@ -299,6 +308,11 @@ export function UserManagementTable({ users, currentUserId }: UserManagementTabl
               {selectedUser?.newRole === "Admin" && (
                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-sm">
                   <strong>Warning:</strong> Admin users have full system access including user management.
+                </div>
+              )}
+              {selectedUser?.newRole === "Head" && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-blue-800 text-sm">
+                  <strong>Info:</strong> Head users can create goals and manage their department.
                 </div>
               )}
             </AlertDialogDescription>

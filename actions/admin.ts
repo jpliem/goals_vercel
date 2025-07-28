@@ -206,7 +206,7 @@ export async function deleteAllStorageFiles() {
   }
 }
 
-export async function updateUserRole(userId: string, newRole: "User" | "Admin") {
+export async function updateUserRole(userId: string, newRole: "Employee" | "Head" | "Admin") {
   try {
     // Authenticate and verify admin role
     const user = await requireAuth()
@@ -216,7 +216,7 @@ export async function updateUserRole(userId: string, newRole: "User" | "Admin") 
     }
     
     // Validate the new role
-    if (!["User", "Admin"].includes(newRole)) {
+    if (!["Employee", "Head", "Admin"].includes(newRole)) {
       return { error: "Invalid role specified" }
     }
     

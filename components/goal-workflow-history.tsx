@@ -59,7 +59,8 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
         return 'Team members assigned'
       case 'completed':
       case 'task_completed':
-        return 'Task marked as completed'
+        const taskTitle = details.task_title ? ` "${details.task_title}"` : ''
+        return `Task${taskTitle} marked as completed`
       case 'commented':
       case 'comment':
         return 'Progress update added'
@@ -86,7 +87,7 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
             <div key={item.id || `history-${index}`} className="flex items-start space-x-3 pb-3 border-b border-gray-100 last:border-b-0">
               <div className="flex-1">
                 <div className="flex items-center space-x-2">
-                  <Badge className={getActionColor(item.action)}>
+                  <Badge className={getActionColor(item.action || '')}>
                     {formatAction(item)}
                   </Badge>
                   <span className="text-sm font-medium">{item.user_name || 'Unknown user'}</span>
@@ -112,6 +113,12 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
                   <p className="text-sm text-gray-700 mt-2 bg-gray-50 p-2 rounded">
                     {item.details.comment}
                   </p>
+                )}
+                {item.details?.completion_notes && (
+                  <div className="text-sm mt-2 bg-green-50 border border-green-200 p-2 rounded">
+                    <strong className="text-green-800">Completion Notes:</strong>
+                    <p className="text-gray-700 mt-1">{item.details.completion_notes}</p>
+                  </div>
                 )}
               </div>
             </div>

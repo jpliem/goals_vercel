@@ -1,15 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from './supabase-client'
 import { RequestWithDetails } from './database'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
 
 // Helper function to get user name and role
 async function getUserInfo(userId: string): Promise<{ name: string; role: string }> {
@@ -26,8 +16,8 @@ async function getUserInfo(userId: string): Promise<{ name: string; role: string
 
     if (user) {
       return {
-        name: user.full_name || user.email || 'Unknown User',
-        role: user.role || 'Unknown'
+        name: (user.full_name as string) || (user.email as string) || 'Unknown User',
+        role: (user.role as string) || 'Unknown'
       }
     }
     
@@ -42,7 +32,8 @@ export type NotificationType = 'clarification' | 'clarification_deleted' | 'assi
 
 interface NotificationData {
   userId: string
-  requestId: string
+  goalId?: string
+  requestId?: string
   type: NotificationType
   title: string
   description: string
@@ -62,6 +53,11 @@ interface WorkflowEntry {
 }
 
 export async function createNotification(data: NotificationData) {
+  if (!supabaseAdmin) {
+    console.warn('Supabase admin client not available for notifications')
+    return
+  }
+
   // Generate UUID explicitly to avoid null ID errors
   const notificationId = crypto.randomUUID()
   
@@ -70,7 +66,8 @@ export async function createNotification(data: NotificationData) {
     .insert({
       id: notificationId,
       user_id: data.userId,
-      request_id: data.requestId,
+      goal_id: data.goalId || null,
+      request_id: data.requestId || null,
       type: data.type,
       title: data.title,
       description: data.description,
@@ -680,6 +677,10 @@ export async function createNotificationsForWorkflowAction(
 }
 
 export async function getUserNotifications(userId: string) {
+  if (!supabaseAdmin) {
+    return []
+  }
+
   const { data, error } = await supabaseAdmin
     .from('notifications')
     .select('*')
@@ -697,6 +698,10 @@ export async function getUserNotifications(userId: string) {
 }
 
 export async function markNotificationAsRead(notificationId: string, userId: string) {
+  if (!supabaseAdmin) {
+    return false
+  }
+
   // Delete the notification (as per the requirement - delete when read)
   const { error } = await supabaseAdmin
     .from('notifications')
@@ -713,6 +718,10 @@ export async function markNotificationAsRead(notificationId: string, userId: str
 }
 
 export async function markAllNotificationsAsRead(userId: string) {
+  if (!supabaseAdmin) {
+    return false
+  }
+
   // Delete all notifications for the user
   const { error } = await supabaseAdmin
     .from('notifications')

@@ -24,7 +24,7 @@ export interface NotificationItem {
   title: string
   description: string
   created_at: string
-  request_id: string
+  goal_id: string
   action_data?: Record<string, any>
 }
 
@@ -112,8 +112,8 @@ export function NotificationBell({ user }: NotificationBellProps) {
         // Remove from local state
         setNotifications(prev => prev.filter(n => n.id !== notification.id))
         
-        // Open request in new tab
-        window.open(`/requests/${notification.request_id}`, '_blank')
+        // Open goal details in new tab
+        window.open(`/dashboard/goals/${notification.goal_id}`, '_blank')
         setIsOpen(false)
       } else {
         console.error('Failed to mark notification as read')

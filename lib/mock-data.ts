@@ -16,9 +16,9 @@ export const mockUsers: UserRecord[] = [
   {
     id: "2",
     email: "pic@company.com",
-    full_name: "PIC User",
+    full_name: "Head User",
     password: "password123",
-    role: "PIC",
+    role: "Head",
     department: "IT",
     skills: ["React", "Node.js"],
     is_active: true,
@@ -28,9 +28,9 @@ export const mockUsers: UserRecord[] = [
   {
     id: "3",
     email: "requestor@company.com",
-    full_name: "Requestor User",
+    full_name: "Employee User",
     password: "password123",
-    role: "Requestor",
+    role: "Employee",
     department: "Sales",
     skills: [],
     is_active: true,
@@ -147,6 +147,6 @@ export function findMockRequestById(id: string): RequestWithDetails | undefined 
   return mockRequests.find(request => request.id === id);
 }
 
-export function getMockPICUsers(): UserRecord[] {
-  return mockUsers.filter(user => user.role === "PIC" || user.role === "Admin");
+export function getMockHeadUsers(): UserRecord[] {
+  return mockUsers.filter(user => user.role === "Head" || user.role === "Admin");
 }

@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "./supabase-client";
 
 // User types - simplified for goal system
 export interface UserRecord {
@@ -6,7 +6,7 @@ export interface UserRecord {
   email: string;
   full_name: string;
   password: string;
-  role: "User" | "Admin";
+  role: "Admin" | "Head" | "Employee";
   department: string | null;
   team: string | null;
   skills: string[];
@@ -51,6 +51,12 @@ export interface GoalComment {
   is_private: boolean;
   created_at: string;
   updated_at: string;
+  user?: {
+    id: string;
+    full_name: string;
+    email: string;
+    role?: string;
+  };
 }
 
 export interface GoalAttachment {
@@ -70,8 +76,10 @@ export interface GoalTask {
   description: string | null;
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  pdca_phase: 'Plan' | 'Do' | 'Check' | 'Act';
   assigned_to: string | null;
   assigned_by: string | null;
+  assigned_user?: UserRecord | null;
   department: string | null;
   due_date: string | null;
   estimated_hours: number;
@@ -111,31 +119,7 @@ export interface GoalSupport {
   created_at: string;
 }
 
-// Environment variables validation
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const hasRequiredEnvVars = supabaseUrl && supabaseServiceKey
-
-if (!hasRequiredEnvVars) {
-  console.warn("Missing Supabase environment variables. Using mock data mode for goals.")
-}
-
-// Create admin client that bypasses RLS (only if we have env vars)
-let supabaseAdmin: ReturnType<typeof createClient> | null = null
-
-if (hasRequiredEnvVars) {
-  try {
-    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  } catch (error) {
-    console.error("Failed to initialize Supabase Admin client for goals:", error)
-    supabaseAdmin = null
-  }
-}
+// Using shared Supabase client from supabase-client.ts
 
 // Extended goal interface with related data
 export interface GoalWithDetails extends Goal {
@@ -145,6 +129,14 @@ export interface GoalWithDetails extends Goal {
   comments?: GoalComment[]
   attachments?: GoalAttachment[]
   support?: GoalSupport[]
+  tasks?: GoalTask[]
+  taskStats?: {
+    total_tasks: number
+    completed_tasks: number
+    pending_tasks: number
+    in_progress_tasks: number
+    completion_percentage: number
+  }
   isFocused?: boolean
 }
 
@@ -177,7 +169,7 @@ const mockGoals: GoalWithDetails[] = [
       email: 'manager@company.com',
       full_name: 'Department Manager',
       password: 'manager123',
-      role: 'User' as const,
+      role: 'Employee' as const,
       department: 'Customer Service',
       team: 'Support',
       skills: ['Leadership', 'Process Improvement'],
@@ -190,7 +182,7 @@ const mockGoals: GoalWithDetails[] = [
       email: 'manager@company.com',
       full_name: 'Department Manager',
       password: 'manager123',
-      role: 'User' as const,
+      role: 'Employee' as const,
       department: 'Customer Service',
       team: 'Support',
       skills: ['Leadership', 'Process Improvement'],
@@ -198,7 +190,39 @@ const mockGoals: GoalWithDetails[] = [
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
-    assignees: []
+    assignees: [],
+    comments: [
+      {
+        id: 'comment-001',
+        goal_id: '650e8400-e29b-41d4-a716-446655440001',
+        user_id: '550e8400-e29b-41d4-a716-446655440002',
+        comment: 'Started implementing new support ticket routing system to improve response times.',
+        is_private: false,
+        created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          full_name: 'Department Manager',
+          email: 'manager@company.com',
+          role: 'Employee'
+        }
+      },
+      {
+        id: 'comment-002',
+        goal_id: '650e8400-e29b-41d4-a716-446655440001',
+        user_id: '550e8400-e29b-41d4-a716-446655440002',
+        comment: 'Customer satisfaction scores have improved from 7.2 to 7.8. On track to meet our target!',
+        is_private: false,
+        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          full_name: 'Department Manager',
+          email: 'manager@company.com',
+          role: 'Employee'
+        }
+      }
+    ]
   },
   {
     id: '650e8400-e29b-41d4-a716-446655440002',
@@ -248,7 +272,24 @@ const mockGoals: GoalWithDetails[] = [
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
-    assignees: []
+    assignees: [],
+    comments: [
+      {
+        id: 'comment-003',
+        goal_id: '650e8400-e29b-41d4-a716-446655440002',
+        user_id: '550e8400-e29b-41d4-a716-446655440001',
+        comment: 'Automated testing pipeline deployed successfully. Seeing significant improvement in cycle time.',
+        is_private: false,
+        created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440001',
+          full_name: 'System Administrator',
+          email: 'admin@company.com',
+          role: 'Admin'
+        }
+      }
+    ]
   },
   {
     id: '650e8400-e29b-41d4-a716-446655440003',
@@ -277,7 +318,7 @@ const mockGoals: GoalWithDetails[] = [
       email: 'user@company.com',
       full_name: 'Regular User',
       password: 'user123',
-      role: 'User',
+      role: 'Employee',
       department: 'HR',
       team: null,
       skills: ['Training', 'Communication'],
@@ -290,7 +331,7 @@ const mockGoals: GoalWithDetails[] = [
       email: 'user@company.com',
       full_name: 'Regular User',
       password: 'user123',
-      role: 'User',
+      role: 'Employee',
       department: 'HR',
       team: null,
       skills: ['Training', 'Communication'],
@@ -298,7 +339,8 @@ const mockGoals: GoalWithDetails[] = [
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
-    assignees: []
+    assignees: [],
+    comments: []
   }
 ]
 
@@ -376,7 +418,9 @@ export async function getGoals(options: {
       .select(`
         *,
         owner:users!goals_owner_id_fkey(*),
-        current_assignee:users!goals_current_assignee_id_fkey(*)
+        current_assignee:users!goals_current_assignee_id_fkey(*),
+        comments:goal_comments(*, user:users(*)),
+        tasks:goal_tasks(*)
       `)
 
     if (options.department) {
@@ -414,9 +458,32 @@ export async function getGoals(options: {
         return acc
       }, {} as Record<string, any[]>) || {}
 
-      // Add assignees to each goal
+      // Add assignees to each goal and calculate task stats
       data.forEach((goal: any) => {
         goal.assignees = assigneesByGoal[goal.id] || []
+        
+        // Calculate task stats
+        if (goal.tasks && goal.tasks.length > 0) {
+          const taskStats = {
+            total_tasks: goal.tasks.length,
+            completed_tasks: goal.tasks.filter((t: GoalTask) => t.status === 'completed').length,
+            pending_tasks: goal.tasks.filter((t: GoalTask) => t.status === 'pending').length,
+            in_progress_tasks: goal.tasks.filter((t: GoalTask) => t.status === 'in_progress').length,
+            completion_percentage: 0
+          }
+          taskStats.completion_percentage = taskStats.total_tasks > 0 
+            ? Math.round((taskStats.completed_tasks / taskStats.total_tasks) * 100)
+            : 0
+          goal.taskStats = taskStats
+        } else {
+          goal.taskStats = {
+            total_tasks: 0,
+            completed_tasks: 0,
+            pending_tasks: 0,
+            in_progress_tasks: 0,
+            completion_percentage: 0
+          }
+        }
       })
     }
 
@@ -442,7 +509,8 @@ export async function getGoalById(goalId: string) {
         current_assignee:users!goals_current_assignee_id_fkey(*),
         comments:goal_comments(*, user:users(*)),
         attachments:goal_attachments(*),
-        support:goal_support(*)
+        support:goal_support(*),
+        tasks:goal_tasks(*, assigned_user:users!goal_tasks_assigned_to_fkey(*), assigned_by_user:users!goal_tasks_assigned_by_fkey(*))
       `)
       .eq("id", goalId)
       .single()
@@ -457,6 +525,35 @@ export async function getGoalById(goalId: string) {
 
     if (data) {
       data.assignees = assigneesData || []
+      
+      // Ensure tasks is always an array (handle Supabase relation errors)
+      if (!Array.isArray(data.tasks)) {
+        (data as any).tasks = []
+      }
+      
+      // Calculate task stats
+      const tasks = data.tasks as unknown as GoalTask[]
+      if (tasks && tasks.length > 0) {
+        const taskStats = {
+          total_tasks: tasks.length,
+          completed_tasks: tasks.filter((t: GoalTask) => t.status === 'completed').length,
+          pending_tasks: tasks.filter((t: GoalTask) => t.status === 'pending').length,
+          in_progress_tasks: tasks.filter((t: GoalTask) => t.status === 'in_progress').length,
+          completion_percentage: 0
+        }
+        taskStats.completion_percentage = taskStats.total_tasks > 0 
+          ? Math.round((taskStats.completed_tasks / taskStats.total_tasks) * 100)
+          : 0
+        data.taskStats = taskStats
+      } else {
+        data.taskStats = {
+          total_tasks: 0,
+          completed_tasks: 0,
+          pending_tasks: 0,
+          in_progress_tasks: 0,
+          completion_percentage: 0
+        }
+      }
     }
 
     return { data, error: null }
@@ -877,7 +974,7 @@ export async function getUserById(userId: string) {
         email: 'user@company.com',
         full_name: 'Mock User',
         password: 'password123',
-        role: 'User',
+        role: 'Employee',
         department: 'IT',
         team: 'Development',
         skills: [],
@@ -916,7 +1013,7 @@ export async function createUserFromSession(sessionUser: any) {
         email: sessionUser.email,
         full_name: sessionUser.full_name || sessionUser.email.split('@')[0],
         password: 'temp-password', // This should be handled properly in production
-        role: sessionUser.role || 'User',
+        role: sessionUser.role || 'Employee',
         department: sessionUser.department || 'General',
         team: null,
         skills: [],
@@ -962,7 +1059,7 @@ export async function getUsers() {
             email: 'manager@company.com',
             full_name: 'Department Manager',
             password: 'manager123',
-            role: 'User' as const,
+            role: 'Employee' as const,
             department: 'Customer Service',
             team: 'Support',
             skills: ['Leadership', 'Process Improvement'],
@@ -975,7 +1072,7 @@ export async function getUsers() {
             email: 'user@company.com',
             full_name: 'Regular User',
             password: 'user123',
-            role: 'User',
+            role: 'Employee',
             department: 'HR',
             team: null,
             skills: ['Training', 'Communication'],
@@ -1017,6 +1114,7 @@ export async function createGoalTask(taskData: {
   due_date?: string;
   estimated_hours?: number;
   order_index?: number;
+  pdca_phase?: 'Plan' | 'Do' | 'Check' | 'Act';
 }) {
   try {
     if (!supabaseAdmin) {
@@ -1033,13 +1131,18 @@ export async function createGoalTask(taskData: {
       }
     }
 
+    // Get the current goal status to default the phase if not provided
+    const goalResult = await getGoalById(taskData.goal_id)
+    const currentGoalStatus = goalResult.data?.status || 'Plan'
+    
     const { data, error } = await supabaseAdmin
       .from("goal_tasks")
       .insert([{
         ...taskData,
         priority: taskData.priority || 'Medium',
         estimated_hours: taskData.estimated_hours || 0,
-        order_index: taskData.order_index || 0
+        order_index: taskData.order_index || 0,
+        pdca_phase: taskData.pdca_phase || currentGoalStatus
       }])
       .select()
       .single()
@@ -1094,7 +1197,8 @@ export async function getUserAssignedTasks(userId: string, statusFilter?: string
       .select(`
         *,
         goal:goals(id, subject, department, status, priority, target_date),
-        assigned_by_user:assigned_by(id, full_name, email)
+        assigned_by_user:assigned_by(id, full_name, email),
+        assigned_user:assigned_to(id, full_name, email, department)
       `)
       .eq("assigned_to", userId)
 
@@ -1110,6 +1214,42 @@ export async function getUserAssignedTasks(userId: string, statusFilter?: string
     return { data, error }
   } catch (error) {
     console.error("Get user assigned tasks error:", error)
+    return { data: [], error: error }
+  }
+}
+
+// Get ALL tasks assigned to a Head user (across all departments)
+export async function getAllUserAssignedTasks(userId: string, statusFilter?: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { 
+        data: [], 
+        error: null 
+      }
+    }
+
+    let query = supabaseAdmin
+      .from("goal_tasks")
+      .select(`
+        *,
+        goal:goals(id, subject, department, status, priority, target_date),
+        assigned_by_user:assigned_by(id, full_name, email),
+        assigned_user:assigned_to(id, full_name, email, department)
+      `)
+      .eq("assigned_to", userId)
+
+    if (statusFilter) {
+      query = query.eq("status", statusFilter)
+    }
+
+    const { data, error } = await query
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: false })
+
+    return { data, error }
+  } catch (error) {
+    console.error("Get all user assigned tasks error:", error)
     return { data: [], error: error }
   }
 }
@@ -1194,7 +1334,7 @@ export async function getGoalTaskStats(goalId: string): Promise<{ data: GoalTask
     const { data, error } = await supabaseAdmin
       .rpc('get_goal_task_stats', { goal_uuid: goalId })
 
-    return { data: data?.[0] || null, error }
+    return { data: (data as any)?.[0] || null, error }
   } catch (error) {
     console.error("Get goal task stats error:", error)
     return { data: null, error: error }

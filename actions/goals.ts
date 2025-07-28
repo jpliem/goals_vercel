@@ -26,6 +26,7 @@ import { uploadToSupabaseStorage } from "@/lib/storage"
 import { uploadGoalAttachment as saveAttachmentToDatabase } from "@/lib/goal-database"
 import { requireAuth } from "@/lib/auth"
 import { createNotificationsForGoalAction, createNotification } from "@/lib/goal-notifications"
+import { supabase as supabaseAdmin } from "@/lib/supabase"
 
 // Helper function to check if user has department permissions
 async function hasDepartmentPermission(userId: string, department: string): Promise<boolean> {
@@ -47,8 +48,8 @@ export async function createGoal(formData: FormData) {
   }
 
   // Server-side security check (defense in depth)
-  if (user.role !== "User" && user.role !== "Admin") {
-    return { error: "Access denied" }
+  if (user.role !== "Head" && user.role !== "Admin") {
+    return { error: "Access denied. Only department heads and admins can create goals." }
   }
 
   // Verify user exists in database (fix for foreign key constraint)
@@ -219,16 +220,15 @@ export async function createGoal(formData: FormData) {
           } else if (tasksResult.data) {
             // Create notifications for assigned users
             for (const task of tasksResult.data) {
-              if (task.assigned_to && task.assigned_to !== user.id) {
+              const assignedUserId = typeof task.assigned_to === 'string' ? task.assigned_to : (task.assigned_to as any)?.id
+              if (assignedUserId && assignedUserId !== user.id) {
                 try {
-                  await createNotification({
-                    user_id: task.assigned_to,
-                    goal_id: data.id as string,
-                    type: 'task_assigned',
-                    title: 'New Task Assigned',
-                    description: `You have been assigned a new task in goal "${subject}": "${task.title}"`,
-                    action_data: { task_id: task.id, task_title: task.title }
-                  })
+                  await createNotification(
+                    assignedUserId,
+                    'New Task Assigned',
+                    `You have been assigned a new task in goal "${subject}": "${task.title}"`,
+                    { task_id: task.id, task_title: task.title, goal_id: data.id as string }
+                  )
                 } catch (notificationError) {
                   console.error("Error creating task notification:", notificationError)
                   // Don't fail for notification errors
@@ -356,6 +356,41 @@ export async function uploadGoalCommentAttachment(formData: FormData) {
   }
 }
 
+// Helper function to check if all tasks in a phase are completed
+async function arePhaseTasksCompleted(goalId: string, phase: string): Promise<{ completed: boolean; incompleteTasks: any[] }> {
+  if (!supabaseAdmin) {
+    return { completed: true, incompleteTasks: [] }
+  }
+
+  try {
+    const { data: incompleteTasks, error } = await supabaseAdmin
+      .from("goal_tasks")
+      .select(`
+        id,
+        title,
+        status,
+        assigned_to,
+        users:assigned_to (full_name, email)
+      `)
+      .eq("goal_id", goalId)
+      .eq("pdca_phase", phase)
+      .neq("status", "completed")
+
+    if (error) {
+      console.error("Error checking phase tasks:", error)
+      return { completed: true, incompleteTasks: [] } // Default to allow progression if there's an error
+    }
+
+    return {
+      completed: incompleteTasks.length === 0,
+      incompleteTasks: incompleteTasks || []
+    }
+  } catch (error) {
+    console.error("Error in arePhaseTasksCompleted:", error)
+    return { completed: true, incompleteTasks: [] }
+  }
+}
+
 export async function updateGoalStatus(goalId: string, status: string, currentAssigneeId?: string) {
   try {
     const user = await requireAuth()
@@ -407,6 +442,28 @@ export async function updateGoalStatus(goalId: string, status: string, currentAs
 
     if (!(await canPerformTransition(oldStatus, status, user.id, user.role))) {
       return { error: "You don't have permission to change this goal's status" }
+    }
+
+    // Check if all tasks in current phase are completed before allowing progression
+    // Only check for forward progression, not for holds or backwards moves
+    const forwardProgressions: Record<string, string> = {
+      "Plan": "Do",
+      "Do": "Check", 
+      "Check": "Act",
+      "Act": "Completed"
+    }
+    
+    if (forwardProgressions[oldStatus] === status) {
+      const phaseCheck = await arePhaseTasksCompleted(goalId, oldStatus)
+      if (!phaseCheck.completed) {
+        const taskList = phaseCheck.incompleteTasks
+          .map(task => `• ${task.title} (${task.users?.full_name || 'Unassigned'})`)
+          .join('\n')
+        
+        return { 
+          error: `Cannot progress from ${oldStatus} to ${status}. Complete all ${oldStatus} phase tasks first:\n\n${taskList}` 
+        }
+      }
     }
 
     // Store previous status for On Hold functionality
@@ -474,6 +531,7 @@ export async function updateGoalDetails(goalId: string, updates: {
 
     // Check permissions
     const canEdit = user.role === "Admin" || 
+                   (user.role === "Head" && currentGoal.department === user.department) ||
                    currentGoal.owner_id === user.id ||
                    (currentGoal.department && await hasDepartmentPermission(user.id, String(currentGoal.department)))
 
@@ -520,7 +578,7 @@ export async function assignGoalAssignees(goalId: string, assigneeIds: string[])
   try {
     const user = await requireAuth()
 
-    // Check permissions (Admin or department permission required)
+    // Check permissions (Admin, Head, or department permission required)
     if (user.role !== "Admin") {
       // Get the goal to check department permissions
       const goalResult = await getGoalById(goalId)
@@ -528,8 +586,11 @@ export async function assignGoalAssignees(goalId: string, assigneeIds: string[])
         return { error: "Goal not found" }
       }
       
-      if (!goalResult.data.department || !await hasDepartmentPermission(user.id, String(goalResult.data.department))) {
-        return { error: "Only admins and users with department permissions can assign goals" }
+      const canAssign = user.role === "Head" && goalResult.data.department === user.department ||
+                       await hasDepartmentPermission(user.id, String(goalResult.data.department))
+      
+      if (!canAssign) {
+        return { error: "Only admins, department heads, and users with department permissions can assign goals" }
       }
     }
 
@@ -569,9 +630,13 @@ export async function completeGoalAssigneeTask(goalId: string, assigneeId: strin
   try {
     const user = await requireAuth()
 
-    // Users can only complete their own tasks
+    // Users can only complete their own tasks, unless Admin or Head managing department tasks
     if (user.id !== assigneeId && user.role !== "Admin") {
-      return { error: "You can only complete your own tasks" }
+      if (user.role !== "Head") {
+        return { error: "You can only complete your own tasks" }
+      }
+      // Head can complete tasks for their department members
+      // Additional validation could be added here if needed
     }
 
     const { data, error } = await completeAssigneeTask(goalId, assigneeId, notes)
@@ -648,8 +713,12 @@ export async function deleteGoal(goalId: string) {
 
     const goal = goalResult.data
 
-    // Only admin or goal owner can delete
-    if (user.role !== "Admin" && goal.owner_id !== user.id) {
+    // Only admin, department head, or goal owner can delete
+    const canDelete = user.role === "Admin" || 
+                     goal.owner_id === user.id ||
+                     (user.role === "Head" && goal.department === user.department)
+    
+    if (!canDelete) {
       return { error: "You don't have permission to delete this goal" }
     }
 

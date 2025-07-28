@@ -29,7 +29,7 @@ const DEBUG_USERS: DebugUser[] = [
     id: '22222222-2222-2222-2222-222222222222',
     email: 'john.smith@company.com',
     full_name: 'John Smith',
-    role: 'User',
+    role: 'Head',
     department: 'IT',
     team: 'Development'
   },
@@ -37,7 +37,7 @@ const DEBUG_USERS: DebugUser[] = [
     id: '33333333-3333-3333-3333-333333333333',
     email: 'sarah.johnson@company.com',
     full_name: 'Sarah Johnson',
-    role: 'User',
+    role: 'Head',
     department: 'HR',
     team: 'Recruitment'
   },
@@ -45,7 +45,7 @@ const DEBUG_USERS: DebugUser[] = [
     id: '44444444-4444-4444-4444-444444444444',
     email: 'mike.chen@company.com',
     full_name: 'Mike Chen',
-    role: 'User',
+    role: 'Employee',
     department: 'IT',
     team: 'Development'
   },
@@ -53,7 +53,7 @@ const DEBUG_USERS: DebugUser[] = [
     id: '55555555-5555-5555-5555-555555555555',
     email: 'lisa.davis@company.com',
     full_name: 'Lisa Davis',
-    role: 'User',
+    role: 'Employee',
     department: 'Sales',
     team: 'Inside Sales'
   }
@@ -144,6 +144,8 @@ export function DebugUserSwitcher({ currentUser, onUserSwitch }: DebugUserSwitch
                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                     user.role === 'Admin' 
                       ? 'bg-purple-100 text-purple-700' 
+                      : user.role === 'Head'
+                      ? 'bg-green-100 text-green-700'
                       : 'bg-blue-100 text-blue-700'
                   }`}>
                     {user.role}

@@ -28,7 +28,7 @@ export interface ExcelUserRow {
   'Full Name': string
   Email: string
   Password: string
-  Role: 'Requestor' | 'PIC' | 'Admin'
+  Role: 'Employee' | 'Head' | 'Admin'
   Department?: string
   'Department Permissions'?: string
 }
@@ -69,7 +69,7 @@ export function createExcelTemplate(
     'Requested Deadline',
     'Request Type',
     'Proposed Application Name',
-    'Requestor Email'
+    'Owner Email'
   ] : [
     'Subject',
     'Description', 
@@ -182,8 +182,8 @@ export function createExcelTemplate(
   if (includeAllSheets) {
     const userHeaders = ['Full Name', 'Email', 'Password', 'Role', 'Department', 'Department Permissions']
     const userSampleData = [
-      ['John Doe', 'john.doe@company.com', 'SecurePass123!', 'Requestor', 'Marketing', ''],
-      ['Jane Smith', 'jane.smith@company.com', 'TechLead456@', 'PIC', 'IT', 'Marketing, Finance'],
+      ['John Doe', 'john.doe@company.com', 'SecurePass123!', 'Employee', 'Marketing', ''],
+      ['Jane Smith', 'jane.smith@company.com', 'TechLead456@', 'Head', 'IT', 'Marketing, Finance'],
       ['Bob Admin', 'admin@company.com', 'AdminPwd789#', 'Admin', 'Management', 'IT, Marketing, Finance, HR']
     ]
     
@@ -193,7 +193,7 @@ export function createExcelTemplate(
     ])
     
     // Add role validation dropdown
-    const roleOptions = ['Requestor', 'PIC', 'Admin']
+    const roleOptions = ['Employee', 'Head', 'Admin']
     const roleColIndex = userHeaders.indexOf('Role')
     
     if (!usersSheet['!dataValidations']) usersSheet['!dataValidations'] = []
@@ -232,7 +232,7 @@ export function createExcelTemplate(
     ['   - Create new user accounts with roles'],
     ['   - Full Name: Display name for the user'],
     ['   - Email: Must be unique, used for login'],
-    ['   - Role: Requestor, PIC, or Admin'],
+    ['   - Role: Employee, Head, or Admin'],
     ['   - Department: Optional organizational unit'],
     ['   - Department Permissions: Comma-separated list of departments user can access'],
     ['   - Example: "IT, Marketing, Finance" (leave empty for no additional permissions)'],
@@ -240,13 +240,13 @@ export function createExcelTemplate(
     ['2. APPLICATIONS SHEET:'],
     ['   - Create new applications with tech leads'],
     ['   - Application Name: Unique name for the application'],
-    ['   - Tech Lead Email: Must match a user email (users with PIC role)'],
+    ['   - Tech Lead Email: Must match a user email (users with Head role)'],
     ['   - Description: Optional description'],
     ['   - Context: Optional technical context for AI analysis'],
     [''],
     ['3. REQUESTS SHEET:'],
     ['   - Create requests on behalf of users'],
-    ['   - Requestor Email: Email of user to create request for'],
+    ['   - Owner Email: Email of user to create request for'],
     ['   - Request Type: Enhancement or New Application'],
     ['   - Enhancement: Requires existing Application, leave Proposed Name empty'],
     ['   - New Application: Leave Application empty, provide Proposed Name'],
@@ -260,8 +260,8 @@ export function createExcelTemplate(
     ['VALIDATION:'],
     ['- Email addresses must be valid and unique'],
     ['- Role values must match dropdown options'],
-    ['- Tech Lead emails must exist in Users sheet (PIC role)'],
-    ['- Requestor emails must exist in Users sheet'],
+    ['- Tech Lead emails must exist in Users sheet (Head role)'],
+    ['- Owner emails must exist in Users sheet'],
     ['- Application names must exist for request import'],
     ['- Department Permissions must be comma-separated (e.g., "IT, Finance")'],
     [''],
@@ -393,7 +393,7 @@ export function exportRequestsToExcel(
       'Days in Status',
       'Total Age (Days)',
       'Requestor Name',
-      'Requestor Email',
+      'Owner Email',
       'Tech Lead Name',
       'Executor Name',
       'Current PIC',
@@ -778,7 +778,7 @@ export function parseUsersFromExcel(buffer: Buffer): { users: ExcelUserRow[], er
     
     // Validation
     const errors: string[] = []
-    const validRoles = ['Requestor', 'PIC', 'Admin']
+    const validRoles = ['Employee', 'Head', 'Admin']
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     
     users.forEach((user, index) => {
@@ -1114,10 +1114,10 @@ export function exportMultiEntityToExcel(
     ['', '', ''],
     
     ['TEAM WORKLOAD SUMMARY', '', ''],
-    ['Total Active PICs', users.filter(u => u.role === 'PIC').length, ''],
-    ['Average Requests per PIC', users.filter(u => u.role === 'PIC').length > 0 ? 
-      Math.round(requests.length / users.filter(u => u.role === 'PIC').length) : 0, ''],
-    ['PICs with Overdue Tasks', workloadStats.filter(w => w.user.role === 'PIC' && w.overdue > 0).length, '']
+    ['Total Active Heads', users.filter(u => u.role === 'Head').length, ''],
+    ['Average Requests per Head', users.filter(u => u.role === 'Head').length > 0 ? 
+      Math.round(requests.length / users.filter(u => u.role === 'Head').length) : 0, ''],
+    ['Heads with Overdue Tasks', workloadStats.filter(w => w.user.role === 'Head' && w.overdue > 0).length, '']
   ]
   
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
@@ -1292,7 +1292,7 @@ export function exportMultiEntityToExcel(
       'Current Workload', 'Performance Rating'
     ],
     ...workloadStats
-      .filter(stats => stats.user.role === 'PIC') // Focus on PICs for performance
+      .filter(stats => stats.user.role === 'Head') // Focus on Heads for performance
       .sort((a, b) => b.totalRequests - a.totalRequests)
       .map(stats => {
         const avgDaysPerTask = stats.completed > 0 ? 
@@ -1452,13 +1452,13 @@ export function exportMultiEntityToExcel(
     ['', '', ''],
     ['WORKLOAD DISTRIBUTION', '', ''],
     ['PICs with No Active Requests', 
-      users.filter(u => u.role === 'PIC' && !requests.some(req => 
+      users.filter(u => u.role === 'Head' && !requests.some(req => 
         req.tech_lead_id === u.id || req.executor_id === u.id)).length,
       'Available for assignment'],
     
     ['PICs with Heavy Workload (>10 requests)', 
-      workloadStats.filter(w => w.user.role === 'PIC' && w.totalRequests > 10).length,
-      workloadStats.filter(w => w.user.role === 'PIC' && w.totalRequests > 10).length === 0 ? 'BALANCED' : 'CONSIDER REDISTRIBUTION'],
+      workloadStats.filter(w => w.user.role === 'Head' && w.totalRequests > 10).length,
+      workloadStats.filter(w => w.user.role === 'Head' && w.totalRequests > 10).length === 0 ? 'BALANCED' : 'CONSIDER REDISTRIBUTION'],
     
     ['Applications without Tech Lead', 
       applications.filter(app => !app.tech_lead_id).length,
@@ -1478,7 +1478,7 @@ export function exportMultiEntityToExcel(
         recommendations.push(['MEDIUM', 'Process New requests - backlog building up', 'WORKFLOW EFFICIENCY'])
       }
       
-      const heavyWorkloadUsers = workloadStats.filter(w => w.user.role === 'PIC' && w.totalRequests > 10).length
+      const heavyWorkloadUsers = workloadStats.filter(w => w.user.role === 'Head' && w.totalRequests > 10).length
       if (heavyWorkloadUsers > 0) {
         recommendations.push(['MEDIUM', 'Balance workload - some PICs overloaded', 'TEAM EFFICIENCY'])
       }

@@ -20,7 +20,15 @@ export default async function TasksPage() {
           userProfile={{
             id: userSession.id,
             full_name: userSession.full_name,
-            department: userSession.department
+            email: userSession.email,
+            password: '', // Not needed for display
+            department: userSession.department || null,
+            team: null,
+            role: userSession.role,
+            skills: [],
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }}
         />
       </main>

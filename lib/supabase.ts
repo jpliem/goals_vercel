@@ -15,7 +15,7 @@ export type Database = {
           email: string
           full_name: string
           password: string
-          role: "Requestor" | "PIC" | "Admin"
+          role: "Admin" | "Head" | "Employee"
           department: string | null
           skills: string[] | null
           is_active: boolean
@@ -27,7 +27,7 @@ export type Database = {
           email: string
           full_name: string
           password: string
-          role?: "Requestor" | "PIC" | "Admin"
+          role?: "Admin" | "Head" | "Employee"
           department?: string | null
           skills?: string[] | null
           is_active?: boolean
@@ -39,7 +39,7 @@ export type Database = {
           email?: string
           full_name?: string
           password?: string
-          role?: "Requestor" | "PIC" | "Admin"
+          role?: "Admin" | "Head" | "Employee"
           department?: string | null
           skills?: string[] | null
           is_active?: boolean

@@ -25,7 +25,7 @@ if (hasRequiredEnvVars) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, full_name, department, role = "User" } = await request.json()
+    const { email, password, full_name, department, role = "Employee" } = await request.json()
 
     // Validation
     if (!email || !password || !full_name || !department) {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate role
-    if (!["User", "Admin"].includes(role)) {
+    if (!["Employee", "Head", "Admin"].includes(role)) {
       return NextResponse.json(
         { error: "Invalid role" },
         { status: 400 }

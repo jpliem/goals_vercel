@@ -8,7 +8,6 @@ import {
   ArrowRight, 
   ArrowDown,
   Users, 
-  Building2, 
   Target, 
   CheckCircle, 
   Clock,
@@ -17,8 +16,7 @@ import {
   RotateCcw,
   Play,
   Settings,
-  MessageSquare,
-  HandHeart
+  MessageSquare
 } from "lucide-react"
 
 interface FlowStep {
@@ -44,119 +42,70 @@ export function PDCAFlowVisualizer({ className = "" }: PDCAFlowVisualizerProps) 
     {
       id: 'plan',
       title: 'Plan Phase',
-      description: 'Goal definition, team assignment, and support requests',
+      description: 'Goal definition, team assignment, and support requests (tasks optional)',
       icon: Target,
       status: 'completed',
       details: [
         'User creates goal with subject, description, priority',
         'Assigns to primary department and specific teams',
-        'Requests support from other departments/teams',
+        'Requests support from other departments/teams (optional)',
         'Sets target date and success criteria',
-        'System validates permissions and data'
+        'Optionally creates tasks for this phase',
+        'Manual progression to Do phase via status change button'
       ],
-      databases: ['goals', 'goal_assignees', 'goal_support'],
-      notifications: ['Goal created', 'Support requested', 'Team assignments']
+      databases: ['goals', 'goal_assignees', 'goal_support', 'goal_tasks'],
+      notifications: ['Goal created notifications', 'Support request notifications', 'Task assignment notifications']
     },
     {
       id: 'do',
       title: 'Do Phase', 
-      description: 'Execution with multi-assignee collaboration',
+      description: 'Execution with multi-assignee collaboration (tasks optional)',
       icon: Play,
       status: 'current',
       details: [
-        'Assignees work on their individual tasks',
-        'Support departments provide assistance',
+        'Work on execution (with or without specific tasks)',
+        'Assignees collaborate on goal achievement',
+        'Support departments provide assistance if requested',
         'Progress tracked via comments and attachments',
-        'Regular status updates and communication',
-        'Cross-department coordination happens'
+        'Manual progression to Check phase when ready'
       ],
-      databases: ['goal_assignees', 'goal_comments', 'goal_attachments'],
-      notifications: ['Task updates', 'Comments added', 'Progress notifications']
+      databases: ['goal_tasks', 'goal_comments', 'goal_attachments', 'workflow_history'],
+      notifications: ['Task completion notifications', 'Comment notifications', 'Status update notifications']
     },
     {
       id: 'check',
       title: 'Check Phase',
-      description: 'Review, validation, and quality assessment',
+      description: 'Review, validation, and quality assessment (tasks optional)',
       icon: CheckCircle,
       status: 'pending',
       details: [
         'Review work completed in Do phase',
-        'Validate against success criteria',
-        'Collect feedback from all stakeholders',
+        'Validate against success criteria and target metrics',
+        'Collect feedback from stakeholders',
         'Identify issues or gaps requiring attention',
-        'Can loop back to Do if problems found'
+        'Manual progression: back to Do if issues found, or forward to Act'
       ],
-      databases: ['goal_comments', 'workflow_history'],
-      notifications: ['Review requests', 'Feedback collection', 'Issue alerts']
+      databases: ['goal_comments', 'workflow_history', 'goal_tasks'],
+      notifications: ['Review completion notifications', 'Comment notifications', 'Status change notifications']
     },
     {
       id: 'act',
       title: 'Act Phase',
-      description: 'Finalization and continuous improvement',
+      description: 'Finalization and continuous improvement (tasks optional)',
       icon: RotateCcw,
       status: 'pending',
       details: [
-        'Implement improvements based on Check phase',
+        'Implement improvements based on Check phase findings',
         'Finalize deliverables and documentation',
-        'Can cycle back to Plan for continuous improvement',
-        'Or mark as Completed if fully satisfied',
-        'Capture lessons learned for future goals'
+        'Capture lessons learned for future goals',
+        'Manual progression: Complete goal or cycle back to Plan',
+        'No task completion required - user decision drives progression'
       ],
-      databases: ['goals', 'workflow_history'],
-      notifications: ['Completion alerts', 'Improvement suggestions', 'Final approvals']
+      databases: ['goals', 'workflow_history', 'goal_tasks'],
+      notifications: ['Goal completion notifications', 'Status change notifications', 'Final workflow notifications']
     }
   ]
 
-  const supportSteps: FlowStep[] = [
-    {
-      id: 'support-request',
-      title: 'Support Request',
-      description: 'Request help from other departments',
-      icon: HandHeart,
-      status: 'completed',
-      details: [
-        'Goal creator identifies needed support',
-        'Selects departments and specific teams',
-        'System creates support records with "Requested" status',
-        'Notifications sent to target departments',
-        'Support requirements tracked in database'
-      ],
-      databases: ['goal_support'],
-      notifications: ['Support requested to departments']
-    },
-    {
-      id: 'support-approval',
-      title: 'Support Approval',
-      description: 'Department leads approve/decline support',
-      icon: Users,
-      status: 'current',
-      details: [
-        'Department leads receive support notifications',
-        'Review goal details and support requirements',
-        'Approve, decline, or request more information',
-        'If approved, assign team members to assist',
-        'Status updated to "Approved" in system'
-      ],
-      databases: ['goal_support', 'goal_assignees'],
-      notifications: ['Support approved/declined', 'New assignees added']
-    },
-    {
-      id: 'support-execution',
-      title: 'Support Execution',
-      description: 'Cross-department collaboration',
-      icon: Building2,
-      status: 'pending',
-      details: [
-        'Supporting team members get goal access',
-        'Collaborate with primary team on execution',
-        'Contribute expertise and resources',
-        'Track individual task completion',
-        'Coordinate through comments and updates'
-      ],
-      databases: ['goal_assignees', 'goal_comments'],
-      notifications: ['Task assignments', 'Collaboration updates']
-    }
-  ]
 
   const statusTransitions = [
     { from: 'Plan', to: ['Do', 'On Hold'], color: 'text-blue-600' },
@@ -192,7 +141,7 @@ export function PDCAFlowVisualizer({ className = "" }: PDCAFlowVisualizerProps) 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">PDCA Workflow Visualizer</h2>
-          <p className="text-gray-600">Interactive visualization of the complete goal workflow with department support</p>
+          <p className="text-gray-600">Interactive visualization of the PDCA goal workflow with task scenarios</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -320,46 +269,52 @@ export function PDCAFlowVisualizer({ className = "" }: PDCAFlowVisualizerProps) 
         </CardContent>
       </Card>
 
-      {/* Department Support Flow */}
+
+      {/* Task Scenarios Explanation */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <HandHeart className="w-5 h-5 text-green-600" />
-            Department Support Workflow
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
+            Task Scenarios & Goal Progression
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {supportSteps.map((step, index) => {
-              const Icon = step.icon
-              const isSelected = selectedStep === step.id
-              
-              return (
-                <div key={step.id} className="relative">
-                  <Card 
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      getStatusColor(step.status)
-                    } ${isSelected ? 'ring-2 ring-green-500' : ''}`}
-                    onClick={() => setSelectedStep(isSelected ? null : step.id)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon className="w-5 h-5 text-green-600" />
-                        {getStatusIcon(step.status)}
-                      </div>
-                      <h3 className="font-semibold text-sm mb-1">{step.title}</h3>
-                      <p className="text-xs text-gray-600">{step.description}</p>
-                    </CardContent>
-                  </Card>
-                  
-                  {index < supportSteps.length - 1 && (
-                    <div className="hidden md:block absolute top-1/2 -right-2 transform -translate-y-1/2 z-10">
-                      <ArrowDown className="w-4 h-4 text-gray-400 bg-white rounded-full p-0.5 border md:rotate-90" />
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            <Card className="border border-emerald-200 bg-emerald-50">
+              <CardContent className="p-4">
+                <h4 className="font-semibold text-emerald-900 mb-2">Goals Without Tasks</h4>
+                <ul className="text-sm text-emerald-800 space-y-1">
+                  <li>• Goals can progress through all PDCA phases without creating any tasks</li>
+                  <li>• Manual progression via status change buttons</li>
+                  <li>• No task completion validation required</li>
+                  <li>• Progress tracked via comments and workflow history</li>
+                </ul>
+              </CardContent>
+            </Card>
+            
+            <Card className="border border-blue-200 bg-blue-50">
+              <CardContent className="p-4">
+                <h4 className="font-semibold text-blue-900 mb-2">Goals With Tasks</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Forward progression requires task completion</li>
+                  <li>• System validates incomplete tasks before allowing next phase</li>
+                  <li>• Backward moves and "On Hold" bypass task checks</li>
+                  <li>• Task completion tracked with notes and completion dates</li>
+                </ul>
+              </CardContent>
+            </Card>
+            
+            <Card className="border border-amber-200 bg-amber-50">
+              <CardContent className="p-4">
+                <h4 className="font-semibold text-amber-900 mb-2">Mixed Scenarios</h4>
+                <ul className="text-sm text-amber-800 space-y-1">
+                  <li>• Some phases can have tasks, others can be task-free</li>
+                  <li>• Example: Plan (3 tasks) → Do (no tasks) → Check (2 tasks) → Act (no tasks)</li>
+                  <li>• Validation only applies to phases with incomplete tasks</li>
+                  <li>• Flexible approach supports various goal types</li>
+                </ul>
+              </CardContent>
+            </Card>
           </div>
         </CardContent>
       </Card>
@@ -369,28 +324,55 @@ export function PDCAFlowVisualizer({ className = "" }: PDCAFlowVisualizerProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-purple-600" />
-            PDCA Status Transition Rules
+            PDCA Status Transition Rules & Validation
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {statusTransitions.map((rule, index) => (
-              <Card key={index} className="border border-gray-200">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="outline" className={rule.color}>{rule.from}</Badge>
-                    <ArrowRight className="w-3 h-3 text-gray-400" />
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {rule.to.map(status => (
-                      <Badge key={status} variant="secondary" className="text-xs">
-                        {status}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {statusTransitions.map((rule, index) => (
+                <Card key={index} className="border border-gray-200">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className={rule.color}>{rule.from}</Badge>
+                      <ArrowRight className="w-3 h-3 text-gray-400" />
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {rule.to.map(status => (
+                        <Badge key={status} variant="secondary" className="text-xs">
+                          {status}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+              <h4 className="font-semibold text-gray-900 mb-3">Validation Logic</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-2">Forward Progression (Task Validation Required):</h5>
+                  <ul className="space-y-1 text-gray-700">
+                    <li>• Plan → Do: Check Plan phase tasks</li>
+                    <li>• Do → Check: Check Do phase tasks</li>
+                    <li>• Check → Act: Check Check phase tasks</li>
+                    <li>• Act → Completed: Check Act phase tasks</li>
+                    <li>• If no tasks exist: <code className="bg-gray-200 px-1 rounded">incompleteTasks.length === 0</code> → ✅ Allow</li>
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="font-medium text-gray-800 mb-2">No Validation Required:</h5>
+                  <ul className="space-y-1 text-gray-700">
+                    <li>• Any status → On Hold</li>
+                    <li>• Check → Do (backward)</li>
+                    <li>• Act → Plan (cycle back)</li>
+                    <li>• On Hold → Any previous status</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

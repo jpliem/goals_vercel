@@ -108,8 +108,11 @@ const getUserRelevantGoals = (
       case "Admin": 
         // Admins see ALL goals (system-wide oversight)
         return true
-      case "User": 
-        // Users see: their goals + any assigned roles they might have + department permissions
+      case "Head": 
+        // Heads see all goals system-wide (like Admin) for management oversight
+        return true
+      case "Employee": 
+        // Employees see: their goals + any assigned roles they might have + department permissions
         return g.owner_id === userId || isCurrentlyAssigned || wasHistoricallyAssigned || hasDepartmentAccess
       default: 
         return false
@@ -533,10 +536,10 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                 </Select>
                 <Select value={ownerFilter} onValueChange={setOwnerFilter}>
                   <SelectTrigger className="w-[140px] h-8">
-                    <SelectValue placeholder="PIC" />
+                    <SelectValue placeholder="Owner" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All PICs</SelectItem>
+                    <SelectItem value="all">All Owners</SelectItem>
                     {uniqueOwners.map(owner => (
                       <SelectItem key={owner.id} value={owner.id}>
                         {owner.name}

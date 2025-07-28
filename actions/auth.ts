@@ -43,7 +43,7 @@ export async function login(formData: FormData) {
       JSON.stringify(sessionData),
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: (process.env.NODE_ENV as string) === "production",
         maxAge: 60 * 60 * 24 * 7, // 1 week
         path: "/",
         sameSite: "lax", // Add sameSite for better compatibility
@@ -77,7 +77,7 @@ export async function register(formData: FormData) {
   }
 
   // Validate role
-  if (!["Requestor", "PIC", "Admin"].includes(role)) {
+  if (!["Employee", "Head", "Admin"].includes(role)) {
     return { error: "Invalid role selected" }
   }
 
@@ -93,7 +93,7 @@ export async function register(formData: FormData) {
       full_name: fullName,
       email: email,
       password: password,
-      role: role as 'Requestor' | 'PIC' | 'Admin',
+      role: role as 'Admin' | 'Head' | 'Employee',
       department: department || undefined
     })
 
@@ -202,7 +202,7 @@ export async function debugSwitchUser(userId: string) {
       JSON.stringify(sessionData),
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: (process.env.NODE_ENV as string) === "production",
         maxAge: 60 * 60 * 24 * 7, // 1 week
         path: "/",
         sameSite: "lax",

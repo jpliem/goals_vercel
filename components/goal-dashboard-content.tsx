@@ -20,7 +20,7 @@ export function GoalDashboardContent({ userProfile, goals, userDepartmentPermiss
           id: userProfile.id, 
           email: userProfile.email, 
           full_name: userProfile.full_name, 
-          role: userProfile.role as "User" | "Admin", 
+          role: userProfile.role as "Admin" | "Head" | "Employee", 
           department: userProfile.department || undefined 
         }} 
         currentTab="overview"

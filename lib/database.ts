@@ -1,69 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import type { Database, AIAnalysisData } from "./supabase";
 import { getTwoWeeksFocusRequestsCompatible, getFocusRequestsRangeCompatible, cleanupOldFocusDataCompatible } from "./database-focus-migration";
 
-// Environment variables validation
-
-// Validate environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-// Check if we have the required environment variables
-const hasRequiredEnvVars = supabaseUrl && supabaseServiceKey
-
-if (!hasRequiredEnvVars) {
-  console.warn("Missing Supabase environment variables. Using mock data mode.")
-}
-
-// Create admin client that bypasses RLS (only if we have env vars)
-let supabaseAdmin: ReturnType<typeof createClient> | null = null
-let supabaseConnectionStatus: 'connected' | 'disconnected' | 'checking' = 'checking'
-
-if (hasRequiredEnvVars) {
-  try {
-    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-    
-    // Test the connection immediately with timeout
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Connection test timeout')), 5000)
-    )
-    
-    const testPromise = supabaseAdmin
-      .from('users')
-      .select('count', { count: 'exact', head: true })
-    
-    Promise.race([testPromise, timeoutPromise])
-      .then((result: any) => {
-        if (result.error) {
-          console.warn("⚠️ Supabase connection test failed:", result.error.message)
-          supabaseConnectionStatus = 'disconnected'
-        } else {
-          supabaseConnectionStatus = 'connected'
-        }
-      })
-      .catch((err: any) => {
-        console.warn("⚠️ Supabase connection test error:", err.message || err)
-        supabaseConnectionStatus = 'disconnected'
-      })
-      
-  } catch (error) {
-    console.error("✗ Failed to initialize Supabase Admin client:", error)
-    supabaseAdmin = null
-    supabaseConnectionStatus = 'disconnected'
-  }
-} else {
-  supabaseConnectionStatus = 'disconnected'
-}
-
-// Export connection status for UI components
-export function getSupabaseConnectionStatus(): 'connected' | 'disconnected' | 'checking' {
-  return supabaseConnectionStatus
-}
+// Using shared Supabase client from supabase-client.ts
+import { supabaseAdmin, getSupabaseConnectionStatus } from './supabase-client'
+export { getSupabaseConnectionStatus }
 
 // Simple SQL function using Supabase client or mock data
 export function getSQL() {
@@ -148,7 +88,7 @@ const mockUsers: UserRecord[] = [
     email: 'john.doe@company.com',
     full_name: 'John Doe',
     password: 'password123',
-    role: 'PIC',
+    role: 'Head',
     department: 'Development',
     skills: ['JavaScript', 'React', 'Node.js'],
     is_active: true,
@@ -160,7 +100,7 @@ const mockUsers: UserRecord[] = [
     email: 'jane.smith@company.com',
     full_name: 'Jane Smith',
     password: 'password123',
-    role: 'PIC',
+    role: 'Head',
     department: 'Development',
     skills: ['Python', 'Django', 'PostgreSQL'],
     is_active: true,
@@ -172,7 +112,7 @@ const mockUsers: UserRecord[] = [
     email: 'user@company.com',
     full_name: 'Test User',
     password: 'password123',
-    role: 'Requestor',
+    role: 'Employee',
     department: 'Business',
     skills: [],
     is_active: true,
@@ -196,7 +136,7 @@ function findMockRequestById(id: string): RequestWithDetails | null {
 const mockApplications: Application[] = []
 
 function getMockPICUsers(): UserRecord[] {
-  return mockUsers.filter(user => user.role === 'PIC' || user.role === 'Admin')
+  return mockUsers.filter(user => user.role === 'Head' || user.role === 'Admin')
 }
 
 export interface RequestWithDetails extends Request {
@@ -309,7 +249,7 @@ export async function getRequests(options: {
       }));
       
       // Apply role-based filtering to mock data
-      if (options.userRole === "Requestor") {
+      if (options.userRole === "Employee") {
         filteredRequests = mockRequestsWithFocus.filter((request) => {
           // Show user's own requests
           if (request.requestor_id === options.userId) return true;
@@ -321,7 +261,7 @@ export async function getRequests(options: {
 
           return false;
         });
-      } else if (options.userRole === "PIC") {
+      } else if (options.userRole === "Head") {
         if (options.assignedToMe) {
           filteredRequests = mockRequestsWithFocus.filter(
             (request) =>
@@ -398,7 +338,7 @@ export async function getRequests(options: {
       .order("created_at", { ascending: false });
 
     // Apply role-based and department-based filtering
-    if (options.userRole === "Requestor" && options.userId) {
+    if (options.userRole === "Employee" && options.userId) {
       // Requestor users can see:
       // 1. Their own requests
       // 2. Requests from departments they have permissions for
@@ -418,7 +358,7 @@ export async function getRequests(options: {
       }
 
       query = query.or(requestorFilter);
-    } else if (options.userRole === "PIC" && options.userId) {
+    } else if (options.userRole === "Head" && options.userId) {
       // PIC users can see requests where they are or were:
       // 1. Assigned as current PIC
       // 2. Assigned as tech lead
@@ -534,9 +474,9 @@ export async function getRequests(options: {
       let countQuery = supabaseAdmin.from("requests").select("*", { count: "exact", head: true });
 
       // Apply same filters for count as the main query
-      if (options.userRole === "Requestor" && options.userId) {
+      if (options.userRole === "Employee" && options.userId) {
         countQuery = countQuery.eq("requestor_id", options.userId);
-      } else if (options.userRole === "PIC" && options.userId) {
+      } else if (options.userRole === "Head" && options.userId) {
         // Include multi-executor assignments in count query as well
         const { data: multiExecutorRequests } = await supabaseAdmin
           .from("request_executors")
@@ -800,7 +740,7 @@ export async function getPICUsers(): Promise<{ data: UserRecord[] | null; error:
     const { data, error } = await supabaseAdmin
       .from("users")
       .select("*")
-      .in("role", ["PIC", "Admin"])
+      .in("role", ["Head", "Admin"])
       .order("full_name");
 
     if (error) {
@@ -1232,7 +1172,7 @@ export async function respondToClarificationRequest(requestId: string, clarifica
             id: `history-${Date.now()}`,
             timestamp: new Date().toISOString(),
             user_id: respondedBy,
-            user_name: "User", // This will be overridden in the action with actual user name
+            user_name: "Employee", // This will be overridden in the action with actual user name
             action: "clarification_response",
             from_status: "Pending Clarification",
             to_status: "Pending Clarification",
@@ -2817,7 +2757,7 @@ export function analyzeAIIntegrationMetrics(
   userRole: string
 ): AIIntegrationMetrics | null {
   // AI metrics only available for Tech Leads
-  if (userRole !== 'PIC' && !userRole.toLowerCase().includes('tech')) {
+  if (userRole !== 'Head' && !userRole.toLowerCase().includes('tech')) {
     return null
   }
   
@@ -3877,7 +3817,7 @@ export async function getPICInvolvementData(focusDate?: string): Promise<PICInvo
     // Step 2: Get PIC/Admin users only (exclude Requestors)
     const picUsers = allUsers.filter(u => 
       u.is_active !== false && 
-      (u.role === 'PIC' || u.role === 'Admin')
+      (u.role === 'Head' || u.role === 'Admin')
     )
     
     console.log(`🔍 Found ${requests.length} requests and ${picUsers.length} PIC/Admin users`)
@@ -5441,7 +5381,7 @@ export async function createUser(userData: {
   email: string
   full_name: string
   password: string
-  role: 'Requestor' | 'PIC' | 'Admin'
+  role: 'Admin' | 'Head' | 'Employee'
   department?: string
 }) {
   try {
@@ -5570,7 +5510,7 @@ export async function getUserByEmail(email: string): Promise<UserRecord | null> 
         email: normalizedEmail,
         full_name: `Mock User (${normalizedEmail})`,
         password: "",
-        role: 'Requestor' as const,
+        role: 'Employee' as const,
         department: null,
         skills: null,
         is_active: true,
@@ -5627,7 +5567,7 @@ export async function bulkCreateUsers(users: Array<{
   email: string
   full_name: string
   password: string
-  role: 'Requestor' | 'PIC' | 'Admin'
+  role: 'Admin' | 'Head' | 'Employee'
   department?: string
   departmentPermissions?: string[]
 }>, currentUserId?: string) {
@@ -6407,7 +6347,7 @@ export async function getAIConfiguration(): Promise<{
       maxTokens: config.maxTokens,
       isOpenWebUI: config.isOpenWebUI,
       isOpenAICompatible: config.isOpenAICompatible,
-      usingMockData: !supabaseAdmin || supabaseConnectionStatus === 'disconnected'
+      usingMockData: !supabaseAdmin || getSupabaseConnectionStatus() === 'disconnected'
     })
     
     return config

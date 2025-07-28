@@ -6,6 +6,7 @@ import {
   createGoalTask,
   getGoalTasks,
   getUserAssignedTasks,
+  getAllUserAssignedTasks,
   updateGoalTask,
   deleteGoalTask,
   getGoalTaskStats,
@@ -28,6 +29,7 @@ export async function createTask(formData: FormData) {
     const department = formData.get("department") as string
     const dueDate = formData.get("due_date") as string
     const estimatedHours = parseInt(formData.get("estimated_hours") as string) || 0
+    const pdcaPhase = formData.get("pdca_phase") as 'Plan' | 'Do' | 'Check' | 'Act'
 
     if (!goalId || !title) {
       console.error("Missing required fields:", { goalId, title })
@@ -43,8 +45,13 @@ export async function createTask(formData: FormData) {
     }
 
     const goal = goalResult.data
-    if (goal.owner_id !== user.id && goal.current_assignee_id !== user.id) {
-      return { error: "Only goal owners and assignees can create tasks" }
+    const canCreateTask = goal.owner_id === user.id || 
+                         goal.current_assignee_id === user.id ||
+                         user.role === "Admin" ||
+                         (user.role === "Head" && goal.department === user.department)
+    
+    if (!canCreateTask) {
+      return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
     }
 
     const result = await createGoalTask({
@@ -56,7 +63,8 @@ export async function createTask(formData: FormData) {
       assigned_by: user.id,
       department: department || undefined,
       due_date: dueDate || undefined,
-      estimated_hours: estimatedHours
+      estimated_hours: estimatedHours,
+      pdca_phase: pdcaPhase || undefined
     })
 
     if (result.error) {
@@ -66,14 +74,12 @@ export async function createTask(formData: FormData) {
 
     // Create notification for assigned user if task is assigned
     if (assignedTo && assignedTo !== user.id) {
-      await createNotification({
-        user_id: assignedTo,
-        goal_id: goalId,
-        type: 'task_assigned',
-        title: 'New Task Assigned',
-        description: `You have been assigned a new task: "${title}"`,
-        action_data: { task_id: result.data?.id, task_title: title }
-      })
+      await createNotification(
+        assignedTo,
+        'New Task Assigned',
+        `You have been assigned a new task: "${title}"`,
+        { task_id: result.data?.id, task_title: title, goal_id: goalId }
+      )
     }
 
     revalidatePath(`/dashboard/goals/${goalId}`)
@@ -95,6 +101,7 @@ export async function createBulkTasks(goalId: string, tasks: Array<{
   department?: string;
   due_date?: string;
   estimated_hours?: number;
+  pdca_phase?: 'Plan' | 'Do' | 'Check' | 'Act';
 }>) {
   try {
     const user = await requireAuth()
@@ -110,8 +117,13 @@ export async function createBulkTasks(goalId: string, tasks: Array<{
     }
 
     const goal = goalResult.data
-    if (goal.owner_id !== user.id && goal.current_assignee_id !== user.id) {
-      return { error: "Only goal owners and assignees can create tasks" }
+    const canCreateTask = goal.owner_id === user.id || 
+                         goal.current_assignee_id === user.id ||
+                         user.role === "Admin" ||
+                         (user.role === "Head" && goal.department === user.department)
+    
+    if (!canCreateTask) {
+      return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
     }
 
     const result = await createBulkGoalTasks(goalId, tasks, user.id)
@@ -123,15 +135,14 @@ export async function createBulkTasks(goalId: string, tasks: Array<{
     // Create notifications for all assigned users
     if (result.data) {
       for (const task of result.data) {
-        if (task.assigned_to && task.assigned_to !== user.id) {
-          await createNotification({
-            user_id: task.assigned_to,
-            goal_id: goalId,
-            type: 'task_assigned',
-            title: 'New Task Assigned',
-            description: `You have been assigned a new task: "${task.title}"`,
-            action_data: { task_id: task.id, task_title: task.title }
-          })
+        const assignedUserId = typeof task.assigned_to === 'string' ? task.assigned_to : (task.assigned_to as any)?.id
+        if (assignedUserId && assignedUserId !== user.id) {
+          await createNotification(
+            assignedUserId,
+            'New Task Assigned',
+            `You have been assigned a new task: "${task.title}"`,
+            { task_id: task.id, task_title: task.title, goal_id: goalId }
+          )
         }
       }
     }
@@ -176,14 +187,12 @@ export async function updateTask(taskId: string, updates: {
     if (updates.assigned_to && updates.assigned_to !== user.id) {
       // Would need to get goal_id from task first for proper notification
       // This is a simplified version
-      await createNotification({
-        user_id: updates.assigned_to,
-        goal_id: result.data?.goal_id || '',
-        type: 'task_assigned',
-        title: 'Task Reassigned',
-        description: `A task has been reassigned to you: "${updates.title || 'Unnamed Task'}"`,
-        action_data: { task_id: taskId }
-      })
+      await createNotification(
+        updates.assigned_to,
+        'Task Reassigned',
+        `A task has been reassigned to you: "${updates.title || 'Unnamed Task'}"`,
+        { task_id: taskId, goal_id: result.data?.goal_id || '' }
+      )
     }
 
     revalidatePath("/dashboard")
@@ -272,7 +281,10 @@ export async function getMyTasks(statusFilter?: string) {
   try {
     const user = await requireAuth()
 
-    const result = await getUserAssignedTasks(user.id, statusFilter)
+    // For Head users, fetch ALL assigned tasks across departments
+    const result = user.role === 'Head' 
+      ? await getAllUserAssignedTasks(user.id, statusFilter)
+      : await getUserAssignedTasks(user.id, statusFilter)
 
     if (result.error) {
       return { error: "Failed to fetch your tasks" }

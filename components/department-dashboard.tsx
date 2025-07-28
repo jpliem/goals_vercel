@@ -61,8 +61,11 @@ const getUserRelevantGoals = (goals: GoalWithDetails[], userProfile: UserRecord,
       case "Admin": 
         // Admins see ALL goals (system-wide oversight)
         return true
-      case "User": 
-        // Users see: their goals + any assigned roles they might have + department permissions
+      case "Head": 
+        // Heads see all goals system-wide (like Admin) for management oversight
+        return true
+      case "Employee": 
+        // Employees see: their goals + any assigned roles they might have + department permissions
         return g.owner_id === userId || isCurrentlyAssigned || wasHistoricallyAssigned || hasDepartmentAccess
       default: 
         return false
@@ -250,7 +253,7 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
               <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                 <span>{goal.department}</span>
                 {goal.teams && goal.teams.length > 0 && <span>• {goal.teams.join(', ')}</span>}
-                <span>• PIC: {goal.owner?.full_name}</span>
+                <span>• Owner: {goal.owner?.full_name}</span>
               </div>
 
               <div className="flex flex-wrap gap-1 mb-2">
@@ -418,7 +421,7 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
                 ? "No goals have been created in the system yet."
                 : "You don't have access to any goals yet."}
             </p>
-            {(userProfile.role === "User" || userProfile.role === "Admin") && (
+            {(userProfile.role === "Head" || userProfile.role === "Admin") && (
               <CreateGoalButton
                 users={users}
                 userProfile={userProfile}

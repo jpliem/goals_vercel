@@ -29,36 +29,48 @@ import {
   ArrowRight
 } from "lucide-react"
 import { getMyTasks, completeTask, startTask, updateTask } from "@/actions/goal-tasks"
+import { getGoalById, type UserRecord } from "@/lib/goal-database"
+import { GoalDetailModal } from "@/components/modals/goal-detail-modal"
 import Link from "next/link"
 
 interface TaskData {
-  task_id: string
+  id: string // This is task_id
   goal_id: string
-  goal_subject: string
-  task_title: string
-  task_description: string | null
+  title: string // This is task_title  
+  description: string | null // This is task_description
   priority: 'Low' | 'Medium' | 'High' | 'Critical'
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
   due_date: string | null
   estimated_hours: number
   department: string | null
   created_at: string
-  goal?: {
+  completion_notes: string | null
+  completed_at: string | null
+  completed_by: string | null
+  goal: {
+    id: string
     subject: string
     department: string
     status: string
     priority: string
     target_date: string | null
+  } | null
+  assigned_by_user?: {
+    id: string
+    full_name: string
+    email: string
+  }
+  assigned_user?: {
+    id: string
+    full_name: string
+    email: string
+    department: string
   }
 }
 
 interface MyTasksDashboardProps {
   userId: string
-  userProfile: {
-    id: string
-    full_name: string
-    department: string | null
-  }
+  userProfile: UserRecord
 }
 
 export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps) {
@@ -70,6 +82,8 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
   const [selectedTask, setSelectedTask] = useState<TaskData | null>(null)
   const [completionNotes, setCompletionNotes] = useState("")
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [selectedGoal, setSelectedGoal] = useState<any | null>(null)
+  const [goalModalOpen, setGoalModalOpen] = useState(false)
 
   // Load tasks
   const loadTasks = async () => {
@@ -77,8 +91,8 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
     try {
       const result = await getMyTasks()
       if (result.success && result.data) {
-        setTasks(result.data)
-        setFilteredTasks(result.data)
+        setTasks(result.data as TaskData[])
+        setFilteredTasks(result.data as TaskData[])
       } else {
         toast.error("Failed to load tasks", { description: result.error })
       }
@@ -93,6 +107,52 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
     loadTasks()
   }, [])
 
+  // Helper function to sort tasks: 1. My tasks, 2. Non-completed tasks, 3. Alphabetically
+  const sortTasks = (taskList: TaskData[]) => {
+    return taskList.sort((a, b) => {
+      // 1. My tasks first (assigned to current user)
+      const aIsAssignedToMe = a.assigned_user?.id === userId
+      const bIsAssignedToMe = b.assigned_user?.id === userId
+      
+      if (aIsAssignedToMe && !bIsAssignedToMe) return -1
+      if (!aIsAssignedToMe && bIsAssignedToMe) return 1
+      
+      // 2. Non-completed tasks first
+      const aIsCompleted = a.status === 'completed'
+      const bIsCompleted = b.status === 'completed'
+      
+      if (!aIsCompleted && bIsCompleted) return -1
+      if (aIsCompleted && !bIsCompleted) return 1
+      
+      // 3. Alphabetically by task title
+      return a.title.localeCompare(b.title)
+    })
+  }
+
+  // Separate tasks by department for Head users
+  const separateTasksByDepartment = (taskList: TaskData[]) => {
+    const isHead = userProfile.role === "Head"
+    
+    if (!isHead) {
+      return {
+        myDepartmentTasks: sortTasks([...taskList]),
+        otherDepartmentTasks: []
+      }
+    }
+    
+    const myDeptTasks = taskList.filter(task => 
+      task.department === userProfile.department || !task.department
+    )
+    const otherDeptTasks = taskList.filter(task => 
+      task.department && task.department !== userProfile.department
+    )
+    
+    return {
+      myDepartmentTasks: sortTasks(myDeptTasks),
+      otherDepartmentTasks: sortTasks(otherDeptTasks)
+    }
+  }
+
   // Filter tasks whenever filters change
   useEffect(() => {
     let filtered = tasks
@@ -105,28 +165,14 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
       filtered = filtered.filter(task => task.priority === priorityFilter)
     }
 
-    // Sort by priority, then due date
-    filtered.sort((a, b) => {
-      const priorityOrder = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 }
-      const aPriority = priorityOrder[a.priority] || 0
-      const bPriority = priorityOrder[b.priority] || 0
-      
-      if (aPriority !== bPriority) {
-        return bPriority - aPriority // Higher priority first
-      }
-
-      // Then by due date (sooner first)
-      if (a.due_date && b.due_date) {
-        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-      }
-      if (a.due_date && !b.due_date) return -1
-      if (!a.due_date && b.due_date) return 1
-      
-      return 0
-    })
+    // For Head users, we'll handle department separation in the render
+    // For other users, just sort normally
+    if (userProfile.role !== "Head") {
+      filtered = sortTasks(filtered)
+    }
 
     setFilteredTasks(filtered)
-  }, [tasks, statusFilter, priorityFilter])
+  }, [tasks, statusFilter, priorityFilter, userProfile.role, userProfile.department])
 
   const handleStartTask = async (taskId: string) => {
     setActionLoading(taskId)
@@ -148,9 +194,9 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
   const handleCompleteTask = async () => {
     if (!selectedTask) return
 
-    setActionLoading(selectedTask.task_id)
+    setActionLoading(selectedTask.id)
     try {
-      const result = await completeTask(selectedTask.task_id, completionNotes)
+      const result = await completeTask(selectedTask.id, completionNotes)
       if (result.success) {
         toast.success("Task completed successfully!")
         setSelectedTask(null)
@@ -163,6 +209,20 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
       toast.error("Failed to complete task")
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const handleOpenGoalModal = async (goalId: string) => {
+    try {
+      const result = await getGoalById(goalId)
+      if (result.data) {
+        setSelectedGoal(result.data)
+        setGoalModalOpen(true)
+      } else {
+        toast.error("Failed to load goal details")
+      }
+    } catch (error) {
+      toast.error("Failed to load goal details")
     }
   }
 
@@ -333,7 +393,7 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
       </Card>
 
       {/* Tasks List */}
-      <div className="space-y-3">
+      <div className="space-y-6">
         {filteredTasks.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
@@ -346,24 +406,345 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
               </p>
             </CardContent>
           </Card>
+        ) : userProfile.role === "Head" ? (
+          // Department-separated view for Head users
+          (() => {
+            const { myDepartmentTasks, otherDepartmentTasks } = separateTasksByDepartment(filteredTasks)
+            
+            return (
+              <>
+                {/* My Department Tasks */}
+                {myDepartmentTasks.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <User className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-semibold text-lg text-gray-900">
+                        My Department Tasks
+                      </h3>
+                      <Badge variant="secondary" className="ml-2">
+                        {myDepartmentTasks.length}
+                      </Badge>
+                    </div>
+                    
+                    {myDepartmentTasks.map((task, index) => (
+                      <Card key={task.id || `my-dept-task-${index}`} className={`hover:shadow-md transition-shadow ${
+                        isOverdue(task.due_date) && task.status !== 'completed' ? 'border-red-200 bg-red-50' : ''
+                      }`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                {getStatusIcon(task.status)}
+                                <h3 
+                                  className="font-semibold text-lg cursor-pointer hover:text-blue-600 transition-colors"
+                                  onClick={() => handleOpenGoalModal(task.goal_id)}
+                                >
+                                  {task.title}
+                                </h3>
+                                <Badge className={getPriorityColor(task.priority)}>
+                                  {task.priority}
+                                </Badge>
+                                {isOverdue(task.due_date) && task.status !== 'completed' && (
+                                  <Badge variant="destructive" className="animate-pulse">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    Overdue
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {task.assigned_user && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <User className="w-4 h-4 text-gray-600" />
+                                  <span className="text-sm font-medium text-gray-700">
+                                    PIC: {task.assigned_user.full_name}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="space-y-2 mb-3">
+                                <div className="flex items-center gap-4 text-sm">
+                                  <Link 
+                                    href={`/dashboard/goals/${task.goal_id}`}
+                                    className="flex items-center gap-1 text-gray-600 hover:text-gray-800 transition-colors font-medium underline"
+                                  >
+                                    <Target className="w-4 h-4" />
+                                    <span>From: {task.goal?.subject || 'Goal not found'}</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </Link>
+                                  {task.assigned_by_user && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-4 h-4 text-gray-400" />
+                                      <span className="text-gray-600">Created by: {task.assigned_by_user.full_name}</span>
+                                    </div>
+                                  )}
+                                  {task.department && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-4 h-4" />
+                                      <span>{task.department}</span>
+                                    </div>
+                                  )}
+                                  {task.due_date && (
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="w-4 h-4" />
+                                      <span>{formatDate(task.due_date)}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {task.description && (
+                                  <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                    {task.description}
+                                  </p>
+                                )}
+                                
+                                {/* Completion Information */}
+                                {task.status === 'completed' && (
+                                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                                    <div className="text-xs text-green-800 font-medium">
+                                      ✓ Completed {task.completed_at && formatDate(task.completed_at)}
+                                      {task.completed_by && task.completed_by !== userProfile.id && (
+                                        <span className="ml-1">
+                                          by {userProfile.role === 'Head' && task.assigned_user ? task.assigned_user.full_name : 'team member'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {task.completion_notes && (
+                                      <div className="text-xs text-gray-700 mt-1">
+                                        <strong>Notes:</strong> {task.completion_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 ml-4">
+                              {task.status === 'pending' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleStartTask(task.id)}
+                                  disabled={actionLoading === task.id}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                  {actionLoading === task.id ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Play className="w-4 h-4 mr-1" />
+                                      Start
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+
+                              {task.status === 'in_progress' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => setSelectedTask(task)}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Complete
+                                </Button>
+                              )}
+
+                              {task.status === 'completed' && (
+                                <Badge variant="secondary" className="text-green-700 bg-green-100">
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                  Done
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {/* Other Department Tasks */}
+                {otherDepartmentTasks.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <User className="w-5 h-5 text-orange-600" />
+                      <h3 className="font-semibold text-lg text-gray-900">
+                        Other Department Tasks
+                      </h3>
+                      <Badge variant="secondary" className="ml-2">
+                        {otherDepartmentTasks.length}
+                      </Badge>
+                    </div>
+                    
+                    {otherDepartmentTasks.map((task, index) => (
+                      <Card key={task.id || `other-dept-task-${index}`} className={`hover:shadow-md transition-shadow ${
+                        isOverdue(task.due_date) && task.status !== 'completed' ? 'border-red-200 bg-red-50' : ''
+                      }`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                {getStatusIcon(task.status)}
+                                <h3 
+                                  className="font-semibold text-lg cursor-pointer hover:text-blue-600 transition-colors"
+                                  onClick={() => handleOpenGoalModal(task.goal_id)}
+                                >
+                                  {task.title}
+                                </h3>
+                                <Badge className={getPriorityColor(task.priority)}>
+                                  {task.priority}
+                                </Badge>
+                                {isOverdue(task.due_date) && task.status !== 'completed' && (
+                                  <Badge variant="destructive" className="animate-pulse">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    Overdue
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {task.assigned_user && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <User className="w-4 h-4 text-gray-600" />
+                                  <span className="text-sm font-medium text-gray-700">
+                                    PIC: {task.assigned_user.full_name}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="space-y-2 mb-3">
+                                <div className="flex items-center gap-4 text-sm">
+                                  <Link 
+                                    href={`/dashboard/goals/${task.goal_id}`}
+                                    className="flex items-center gap-1 text-gray-600 hover:text-gray-800 transition-colors font-medium underline"
+                                  >
+                                    <Target className="w-4 h-4" />
+                                    <span>From: {task.goal?.subject || 'Goal not found'}</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </Link>
+                                  {task.assigned_by_user && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-4 h-4 text-gray-400" />
+                                      <span className="text-gray-600">Created by: {task.assigned_by_user.full_name}</span>
+                                    </div>
+                                  )}
+                                  {task.department && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-4 h-4" />
+                                      <span>{task.department}</span>
+                                    </div>
+                                  )}
+                                  {task.due_date && (
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="w-4 h-4" />
+                                      <span>{formatDate(task.due_date)}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {task.description && (
+                                  <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                    {task.description}
+                                  </p>
+                                )}
+                                
+                                {/* Completion Information */}
+                                {task.status === 'completed' && (
+                                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                                    <div className="text-xs text-green-800 font-medium">
+                                      ✓ Completed {task.completed_at && formatDate(task.completed_at)}
+                                      {task.completed_by && task.completed_by !== userProfile.id && (
+                                        <span className="ml-1">
+                                          by {userProfile.role === 'Head' && task.assigned_user ? task.assigned_user.full_name : 'team member'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {task.completion_notes && (
+                                      <div className="text-xs text-gray-700 mt-1">
+                                        <strong>Notes:</strong> {task.completion_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 ml-4">
+                              {task.status === 'pending' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleStartTask(task.id)}
+                                  disabled={actionLoading === task.id}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                  {actionLoading === task.id ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Play className="w-4 h-4 mr-1" />
+                                      Start
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+
+                              {task.status === 'in_progress' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => setSelectedTask(task)}
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Complete
+                                </Button>
+                              )}
+
+                              {task.status === 'completed' && (
+                                <Badge variant="secondary" className="text-green-700 bg-green-100">
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                  Done
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {/* No tasks message for Head users */}
+                {myDepartmentTasks.length === 0 && otherDepartmentTasks.length === 0 && (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-600 mb-2">No tasks found</h3>
+                      <p className="text-gray-500">
+                        {statusFilter !== "all" || priorityFilter !== "all" 
+                          ? "Try adjusting your filters to see more tasks"
+                          : "You don't have any assigned tasks yet"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )
+          })()
         ) : (
+          // Regular view for non-Head users
           filteredTasks.map((task, index) => (
-            <Card key={task.task_id || `task-${index}`} className={`hover:shadow-md transition-shadow ${
+            <Card key={task.id || `task-${index}`} className={`hover:shadow-md transition-shadow ${
               isOverdue(task.due_date) && task.status !== 'completed' ? 'border-red-200 bg-red-50' : ''
             }`}>
               <CardContent className="p-4">
-                {/* Debug info - remove in production */}
-                {process.env.NODE_ENV === 'development' && (
-                  <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded mb-2">
-                    Goal: {task.goal_subject || 'Missing goal_subject'} | Task: {task.task_title}
-                  </div>
-                )}
-                
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       {getStatusIcon(task.status)}
-                      <h3 className="font-semibold text-lg">{task.task_title}</h3>
+                      <h3 
+                        className="font-semibold text-lg cursor-pointer hover:text-blue-600 transition-colors"
+                        onClick={() => handleOpenGoalModal(task.goal_id)}
+                      >
+                        {task.title}
+                      </h3>
                       <Badge className={getPriorityColor(task.priority)}>
                         {task.priority}
                       </Badge>
@@ -375,16 +756,31 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
                       )}
                     </div>
 
+                    {task.assigned_user && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <User className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">
+                          PIC: {task.assigned_user.full_name}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="space-y-2 mb-3">
                       <div className="flex items-center gap-4 text-sm">
                         <Link 
                           href={`/dashboard/goals/${task.goal_id}`}
-                          className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors font-medium"
+                          className="flex items-center gap-1 text-gray-600 hover:text-gray-800 transition-colors font-medium underline"
                         >
                           <Target className="w-4 h-4" />
-                          <span>From: {task.goal_subject || 'Goal not found'}</span>
+                          <span>From: {task.goal?.subject || 'Goal not found'}</span>
                           <ArrowRight className="w-3 h-3" />
                         </Link>
+                        {task.assigned_by_user && (
+                          <div className="flex items-center gap-1">
+                            <User className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-600">Created by: {task.assigned_by_user.full_name}</span>
+                          </div>
+                        )}
                         {task.department && (
                           <div className="flex items-center gap-1">
                             <User className="w-4 h-4" />
@@ -397,17 +793,11 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
                             <span>{formatDate(task.due_date)}</span>
                           </div>
                         )}
-                        {task.estimated_hours > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            <span>{task.estimated_hours}h</span>
-                          </div>
-                        )}
                       </div>
 
-                      {task.task_description && (
+                      {task.description && (
                         <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                          {task.task_description}
+                          {task.description}
                         </p>
                       )}
                     </div>
@@ -417,11 +807,11 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
                     {task.status === 'pending' && (
                       <Button
                         size="sm"
-                        onClick={() => handleStartTask(task.task_id)}
-                        disabled={actionLoading === task.task_id}
+                        onClick={() => handleStartTask(task.id)}
+                        disabled={actionLoading === task.id}
                         className="bg-blue-600 hover:bg-blue-700 text-white"
                       >
-                        {actionLoading === task.task_id ? (
+                        {actionLoading === task.id ? (
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
@@ -463,7 +853,7 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
           <DialogHeader>
             <DialogTitle>Complete Task</DialogTitle>
             <DialogDescription>
-              Mark "{selectedTask?.task_title}" as completed. You can optionally add completion notes.
+              Mark "{selectedTask?.title}" as completed. You can optionally add completion notes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -484,10 +874,10 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
             </Button>
             <Button 
               onClick={handleCompleteTask}
-              disabled={actionLoading === selectedTask?.task_id}
+              disabled={actionLoading === selectedTask?.id}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
-              {actionLoading === selectedTask?.task_id ? (
+              {actionLoading === selectedTask?.id ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
               ) : (
                 <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -497,6 +887,18 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Goal Detail Modal */}
+      <GoalDetailModal
+        goal={selectedGoal}
+        userProfile={userProfile}
+        isOpen={goalModalOpen}
+        onClose={() => {
+          setGoalModalOpen(false)
+          setSelectedGoal(null)
+        }}
+        onRefresh={loadTasks}
+      />
     </div>
   )
 }

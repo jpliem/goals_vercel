@@ -24,7 +24,7 @@ export default function RegisterPage() {
     confirmPassword: "",
     full_name: "",
     department: "",
-    role: "User" as "User" | "Admin"
+    role: "Employee" as "Employee" | "Head" | "Admin"
   })
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -186,13 +186,14 @@ export default function RegisterPage() {
                 <Label htmlFor="role">Role</Label>
                 <Select 
                   value={formData.role} 
-                  onValueChange={(value: "User" | "Admin") => handleInputChange("role", value)}
+                  onValueChange={(value: "Employee" | "Head" | "Admin") => handleInputChange("role", value)}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="User">User</SelectItem>
+                    <SelectItem value="Employee">Employee</SelectItem>
+                    <SelectItem value="Head">Head</SelectItem>
                     <SelectItem value="Admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>

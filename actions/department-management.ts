@@ -47,7 +47,7 @@ export async function getDepartmentTeamStructure() {
 
     const { data, error } = await supabaseAdmin
       .from("department_teams")
-      .select("department, team, is_active, created_at, updated_at")
+      .select("department, team, is_active, created_at")
       .eq("is_active", true)
       .order("department", { ascending: true })
       .order("team", { ascending: true })

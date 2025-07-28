@@ -47,7 +47,6 @@ import { FileUpload } from "@/components/ui/file-upload"
 import { PDCAProgress } from "@/components/pdca-progress"
 import { GoalWorkflowHistory } from "@/components/goal-workflow-history"
 import { EditGoalModal } from "@/components/modals/edit-goal-modal"
-import { AssignGoalAssigneeModal } from "@/components/modals/assign-goal-assignee-modal"
 import { AssigneesStakeholdersCard } from "@/components/assignees-stakeholders-card"
 import { GoalTasksCard } from "@/components/goal-tasks-card"
 
@@ -63,7 +62,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
-  const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<GoalAttachment[]>([])
@@ -93,9 +91,10 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
   const isAnyAssignee = isMultiAssignee || isLegacyAssignee
   
   const wasInvolved = isOwner || isAnyAssignee
-  const canEdit = userProfile.role === "Admin" || isOwner
-  const canComment = isOwner || isAnyAssignee || userProfile.role === "Admin"
-  const canAssign = userProfile.role === "Admin" || isOwner
+  const canEdit = userProfile.role === "Admin" || 
+                 (userProfile.role === "Head" && goal.department === userProfile.department) ||
+                 isOwner
+  const canComment = isOwner || isAnyAssignee || userProfile.role === "Admin" || userProfile.role === "Head"
 
   // Helper function to get PDCA status color
   const getStatusColor = (status: string) => {
@@ -294,16 +293,99 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
               </div>
 
               <div className="flex items-center gap-3">
-                {canAssign && (
-                  <Button
-                    onClick={() => setAssignModalOpen(true)}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Assign
-                  </Button>
+                {/* PDCA Progress Controls */}
+                {(canEdit || isAnyAssignee) && goal.status !== "Completed" && goal.status !== "Cancelled" && (
+                  <>
+                    {goal.status === "Plan" && (
+                      <Button 
+                        onClick={() => handleStatusChange("Do")}
+                        disabled={isLoading}
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        <Target className="h-4 w-4 mr-2" />
+                        Start Do Phase
+                      </Button>
+                    )}
+                    {goal.status === "Do" && (
+                      <Button 
+                        onClick={() => handleStatusChange("Check")}
+                        disabled={isLoading}
+                        size="sm"
+                        className="bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Begin Check
+                      </Button>
+                    )}
+                    {goal.status === "Check" && (
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => handleStatusChange("Act")}
+                          disabled={isLoading}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Take Action
+                        </Button>
+                        <Button 
+                          onClick={() => handleStatusChange("Do")}
+                          disabled={isLoading}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Back to Do
+                        </Button>
+                      </div>
+                    )}
+                    {goal.status === "Act" && (
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => handleStatusChange("Completed")}
+                          disabled={isLoading}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Complete Goal
+                        </Button>
+                        <Button 
+                          onClick={() => handleStatusChange("Plan")}
+                          disabled={isLoading}
+                          variant="outline"
+                          size="sm"
+                        >
+                          New PDCA Cycle
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {goal.status !== "On Hold" && (
+                      <Button 
+                        onClick={() => handleStatusChange("On Hold")}
+                        disabled={isLoading}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Pause className="h-4 w-4 mr-2" />
+                        Hold
+                      </Button>
+                    )}
+                    
+                    {goal.status === "On Hold" && (
+                      <Button 
+                        onClick={() => handleStatusChange(goal.previous_status || "Plan")}
+                        disabled={isLoading}
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        Resume Goal
+                      </Button>
+                    )}
+                  </>
                 )}
+                
                 {canEdit && (
                   <Button
                     size="sm"
@@ -395,6 +477,8 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
               users={users}
               isOwner={isOwner}
               isAssignee={isAnyAssignee}
+              currentGoalStatus={goal.status}
+              goalDepartment={goal.department}
             />
           </TabsContent>
 
@@ -423,98 +507,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                     }))}
                   />
 
-                  {/* Current Phase Actions */}
-                  {(canEdit || isAnyAssignee) && goal.status !== "Completed" && goal.status !== "Cancelled" && (
-                    <div className="border-t pt-4">
-                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                        <h4 className="font-medium text-sm mb-4 flex items-center gap-2 text-blue-900">
-                          <Target className="h-4 w-4" />
-                          Current Phase Actions
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {goal.status === "Plan" && (
-                            <Button 
-                              onClick={() => handleStatusChange("Do")}
-                              disabled={isLoading}
-                              size="sm"
-                            >
-                              Start Execution
-                            </Button>
-                          )}
-                          {goal.status === "Do" && (
-                            <Button 
-                              onClick={() => handleStatusChange("Check")}
-                              disabled={isLoading}
-                              size="sm"
-                            >
-                              Begin Review
-                            </Button>
-                          )}
-                          {goal.status === "Check" && (
-                            <>
-                              <Button 
-                                onClick={() => handleStatusChange("Act")}
-                                disabled={isLoading}
-                                size="sm"
-                              >
-                                Take Action
-                              </Button>
-                              <Button 
-                                onClick={() => handleStatusChange("Do")}
-                                disabled={isLoading}
-                                variant="outline"
-                                size="sm"
-                              >
-                                Back to Do
-                              </Button>
-                            </>
-                          )}
-                          {goal.status === "Act" && (
-                            <>
-                              <Button 
-                                onClick={() => handleStatusChange("Completed")}
-                                disabled={isLoading}
-                                size="sm"
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                Mark Complete
-                              </Button>
-                              <Button 
-                                onClick={() => handleStatusChange("Plan")}
-                                disabled={isLoading}
-                                variant="outline"
-                                size="sm"
-                              >
-                                New Cycle
-                              </Button>
-                            </>
-                          )}
-                          
-                          {goal.status !== "On Hold" && (
-                            <Button 
-                              onClick={() => handleStatusChange("On Hold")}
-                              disabled={isLoading}
-                              variant="outline"
-                              size="sm"
-                            >
-                              <Pause className="h-4 w-4 mr-2" />
-                              Put On Hold
-                            </Button>
-                          )}
-                          
-                          {goal.status === "On Hold" && (
-                            <Button 
-                              onClick={() => handleStatusChange(goal.previous_status || "Plan")}
-                              disabled={isLoading}
-                              size="sm"
-                            >
-                              Resume Goal
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Task Completion for Multi-Assignees */}
                   {isMultiAssignee && goal.status !== "Completed" && (
@@ -744,16 +736,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
           />
         )}
 
-        {assignModalOpen && (
-          <AssignGoalAssigneeModal
-            isOpen={assignModalOpen}
-            onClose={() => setAssignModalOpen(false)}
-            goalId={goal.id}
-            users={users}
-            currentAssignees={goal.assignees?.map(a => a.user_id) || []}
-            onUpdate={() => onDataRefresh?.()}
-          />
-        )}
       </div>
     </div>
   )

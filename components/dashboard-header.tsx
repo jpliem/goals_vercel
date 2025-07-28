@@ -78,7 +78,7 @@ export function DashboardHeader({ user, currentTab = 'overview', users, departme
             </nav>
           </div>
           <div className="flex items-center space-x-3">
-            {(user.role === "User" || user.role === "Admin") && (
+            {(user.role === "Head" || user.role === "Admin") && (
               <CreateRequestButton 
                 users={users as any}
                 userProfile={user as any}

@@ -346,7 +346,7 @@ export async function importUsers(formData: FormData) {
       email: user.Email,
       full_name: user['Full Name'],
       password: user.Password,
-      role: user.Role as 'Requestor' | 'PIC' | 'Admin',
+      role: user.Role as 'Admin' | 'Head' | 'Employee',
       department: user.Department || undefined,
       departmentPermissions: user['Department Permissions']?.trim() 
         ? user['Department Permissions'].split(',').map(d => d.trim()).filter(d => d.length > 0)
