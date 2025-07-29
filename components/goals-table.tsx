@@ -344,7 +344,7 @@ export function GoalsTable({ goals, userProfile, users, userDepartmentPermission
             <Card 
               key={goal.id} 
               className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => window.open(`/goals/${goal.id}`, '_blank')}
+              onClick={() => window.open(`/dashboard/goals/${goal.id}`, '_blank')}
             >
               <CardContent className="p-4">
                 <div className="space-y-3">

@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -418,15 +417,22 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
             {(() => {
               const currentPhaseStats = getCurrentPhaseTaskStats()
               return currentPhaseStats && currentPhaseStats.total_tasks > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">{localGoal.status} Phase Progress</span>
-                    <span className="text-gray-700 font-medium">
-                      {currentPhaseStats.completed_tasks} of {currentPhaseStats.total_tasks} tasks complete 
-                      ({currentPhaseStats.pending_tasks} pending, {currentPhaseStats.in_progress_tasks} in progress)
-                    </span>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      localGoal.status === 'Plan' ? 'bg-blue-500' :
+                      localGoal.status === 'Do' ? 'bg-purple-500' :
+                      localGoal.status === 'Check' ? 'bg-orange-500' :
+                      localGoal.status === 'Act' ? 'bg-green-500' :
+                      localGoal.status === 'Completed' ? 'bg-green-600' :
+                      'bg-gray-400'
+                    }`} />
+                    <span className="text-gray-600">{localGoal.status} Phase</span>
                   </div>
-                  <Progress value={currentPhaseStats.completion_percentage} className="h-2" />
+                  <span className="text-gray-700">
+                    {currentPhaseStats.completed_tasks}/{currentPhaseStats.total_tasks} tasks complete 
+                    ({currentPhaseStats.pending_tasks} pending, {currentPhaseStats.in_progress_tasks} in progress)
+                  </span>
                 </div>
               ) : null
             })()}

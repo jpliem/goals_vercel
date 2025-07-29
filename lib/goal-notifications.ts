@@ -13,13 +13,87 @@ interface NotificationData {
 
 // Simple notification system for goal management
 export async function createNotificationsForGoalAction(
-  goalId: string,
-  action: string,
-  data: any
+  goal: any,
+  workflowEntry: any,
+  currentUserId: string
 ) {
-  // Placeholder function - notifications can be added later
-  console.log(`Goal notification: ${action} for goal ${goalId}`, data)
-  return { success: true }
+  if (!goal || !workflowEntry) {
+    console.error('Missing goal or workflow entry for notification')
+    return { success: false }
+  }
+
+  try {
+    // Get all goal assignees and relevant users to notify
+    const usersToNotify = new Set<string>()
+    
+    // Add goal owner (unless they are the current user)
+    if (goal.owner_id && goal.owner_id !== currentUserId) {
+      usersToNotify.add(goal.owner_id)
+    }
+    
+    // Add goal assignees (unless they are the current user)
+    if (goal.assignees && Array.isArray(goal.assignees)) {
+      goal.assignees.forEach((assignee: any) => {
+        if (assignee.user_id && assignee.user_id !== currentUserId) {
+          usersToNotify.add(assignee.user_id)
+        }
+      })
+    }
+
+    // Generate notification content based on action
+    let title = ''
+    let description = ''
+    
+    switch (workflowEntry.action) {
+      case 'goal_created':
+        title = 'New Goal Created'
+        description = `Goal "${goal.subject}" has been created and assigned to you`
+        break
+      case 'status_changed':
+        title = 'Goal Status Updated'
+        description = `Goal "${goal.subject}" status changed to ${goal.status}`
+        break
+      case 'comment_added':
+        title = 'New Comment Added'
+        description = `New comment added to goal "${goal.subject}"`
+        break
+      case 'assignees_updated':
+        title = 'Goal Assignment Updated'
+        description = `You have been assigned to goal "${goal.subject}"`
+        break
+      case 'task_completed':
+        title = 'Task Completed'
+        description = `A task was completed in goal "${goal.subject}"`
+        break
+      case 'support_status_updated':
+        title = 'Support Status Updated'
+        description = `Support status updated for goal "${goal.subject}"`
+        break
+      default:
+        title = 'Goal Update'
+        description = `Goal "${goal.subject}" has been updated`
+    }
+
+    // Create notifications for all relevant users
+    const notificationPromises = Array.from(usersToNotify).map(userId =>
+      createNotification(userId, title, description, {
+        goal_id: goal.id,
+        action: workflowEntry.action,
+        workflow_data: workflowEntry
+      })
+    )
+
+    const results = await Promise.allSettled(notificationPromises)
+    const successful = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.filter(r => r.status === 'rejected').length
+
+    console.log(`✅ Created ${successful} goal notifications (${failed} failed) for goal ${goal.id}`)
+    return { success: true, notified: successful, failed }
+    
+  } catch (error) {
+    console.error('Error creating goal notifications:', error)
+    return { success: false, error }
+  }
 }
 
 export async function createNotification(

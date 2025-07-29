@@ -816,12 +816,12 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                                         <Badge 
                                           variant={
                                             support.status === 'Completed' ? 'default' :
-                                            support.status === 'Approved' ? 'secondary' :
+                                            support.status === 'Accepted' ? 'secondary' :
                                             support.status === 'Declined' ? 'destructive' : 'outline'
                                           }
                                           className="text-xs"
                                         >
-                                          {support.status || 'Requested'}
+                                          {support.status || 'Accepted'}
                                         </Badge>
                                       </div>
                                     ))}

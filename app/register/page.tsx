@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,11 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, UserPlus, ArrowLeft } from "lucide-react"
-
-const DEPARTMENTS = [
-  "IT", "HR", "Finance", "Operations", "Marketing", "Sales", "Customer Service",
-  "Product Development", "Quality Assurance", "Legal", "Administration"
-]
+import { getDepartmentTeamStructure } from "@/actions/department-management"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -24,16 +20,62 @@ export default function RegisterPage() {
     confirmPassword: "",
     full_name: "",
     department: "",
+    team: "",
     role: "Employee" as "Employee" | "Head" | "Admin"
   })
+  const [departmentTeams, setDepartmentTeams] = useState<Record<string, string[]>>({})
+  const [loadingDepartments, setLoadingDepartments] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  // Load department/team structure on component mount
+  useEffect(() => {
+    const loadDepartmentStructure = async () => {
+      try {
+        const result = await getDepartmentTeamStructure()
+        if (result.success && result.data) {
+          setDepartmentTeams(result.data)
+        } else {
+          console.error("Failed to load department structure:", result.error)
+          // Fallback to hardcoded departments if the API fails
+          const fallbackDepts = ["IT", "HR", "Finance", "Operations", "Marketing", "Sales", "Customer Service", "Product Development", "Quality Assurance", "Legal", "Administration"]
+          const fallbackStructure: Record<string, string[]> = {}
+          fallbackDepts.forEach(dept => {
+            fallbackStructure[dept] = ["General"] // Default team
+          })
+          setDepartmentTeams(fallbackStructure)
+        }
+      } catch (error) {
+        console.error("Error loading department structure:", error)
+        // Same fallback as above
+        const fallbackDepts = ["IT", "HR", "Finance", "Operations", "Marketing", "Sales", "Customer Service", "Product Development", "Quality Assurance", "Legal", "Administration"]
+        const fallbackStructure: Record<string, string[]> = {}
+        fallbackDepts.forEach(dept => {
+          fallbackStructure[dept] = ["General"]
+        })
+        setDepartmentTeams(fallbackStructure)
+      } finally {
+        setLoadingDepartments(false)
+      }
+    }
+
+    loadDepartmentStructure()
+  }, [])
+
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      }
+      
+      // If department changes, reset team selection
+      if (field === "department") {
+        newData.team = ""
+      }
+      
+      return newData
+    })
     setError(null)
   }
 
@@ -69,6 +111,7 @@ export default function RegisterPage() {
           password: formData.password,
           full_name: formData.full_name.trim(),
           department: formData.department,
+          team: formData.team || null,
           role: formData.role
         }),
       })
@@ -168,12 +211,13 @@ export default function RegisterPage() {
                 <Select 
                   value={formData.department} 
                   onValueChange={(value) => handleInputChange("department", value)}
+                  disabled={loadingDepartments}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select your department" />
+                    <SelectValue placeholder={loadingDepartments ? "Loading departments..." : "Select your department"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {DEPARTMENTS.map((dept) => (
+                    {Object.keys(departmentTeams).map((dept) => (
                       <SelectItem key={dept} value={dept}>
                         {dept}
                       </SelectItem>
@@ -181,6 +225,27 @@ export default function RegisterPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.department && (
+                <div>
+                  <Label htmlFor="team">Team</Label>
+                  <Select 
+                    value={formData.team} 
+                    onValueChange={(value) => handleInputChange("team", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select your team (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentTeams[formData.department]?.map((team) => (
+                        <SelectItem key={team} value={team}>
+                          {team}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="role">Role</Label>

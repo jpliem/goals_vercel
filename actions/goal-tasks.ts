@@ -12,7 +12,8 @@ import {
   getGoalTaskStats,
   completeGoalTask,
   createBulkGoalTasks,
-  getGoalById
+  getGoalById,
+  addTaskWorkflowEntry
 } from "@/lib/goal-database"
 import { createNotification } from "@/lib/goal-notifications"
 
@@ -27,6 +28,7 @@ export async function createTask(formData: FormData) {
     const priority = formData.get("priority") as 'Low' | 'Medium' | 'High' | 'Critical'
     const assignedTo = formData.get("assigned_to") as string
     const department = formData.get("department") as string
+    const startDate = formData.get("start_date") as string
     const dueDate = formData.get("due_date") as string
     const estimatedHours = parseInt(formData.get("estimated_hours") as string) || 0
     const pdcaPhase = formData.get("pdca_phase") as 'Plan' | 'Do' | 'Check' | 'Act'
@@ -46,12 +48,30 @@ export async function createTask(formData: FormData) {
 
     const goal = goalResult.data
     const canCreateTask = goal.owner_id === user.id || 
-                         goal.current_assignee_id === user.id ||
                          user.role === "Admin" ||
                          (user.role === "Head" && goal.department === user.department)
     
+    // Also check if user is in goal assignees (unified permission system)
+    if (!canCreateTask) {
+      const { getGoalAssignees } = require("@/lib/goal-database")
+      const assignees = await getGoalAssignees(goal.id)
+      const isAssignee = assignees.data?.some((a: any) => a.user_id === user.id)
+      if (!isAssignee) {
+        return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
+      }
+    }
+    
     if (!canCreateTask) {
       return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
+    }
+
+    // Date validation: start_date <= due_date
+    if (startDate && dueDate) {
+      const start = new Date(startDate)
+      const due = new Date(dueDate)
+      if (start > due) {
+        return { error: "Task start date cannot be later than due date" }
+      }
     }
 
     const result = await createGoalTask({
@@ -62,6 +82,7 @@ export async function createTask(formData: FormData) {
       assigned_to: (assignedTo && assignedTo !== "unassigned") ? assignedTo : undefined,
       assigned_by: user.id,
       department: department || undefined,
+      start_date: startDate || undefined,
       due_date: dueDate || undefined,
       estimated_hours: estimatedHours,
       pdca_phase: pdcaPhase || undefined
@@ -80,6 +101,23 @@ export async function createTask(formData: FormData) {
         `You have been assigned a new task: "${title}"`,
         { task_id: result.data?.id, task_title: title, goal_id: goalId }
       )
+    }
+
+    // Add workflow entry for task creation
+    try {
+      await addTaskWorkflowEntry(
+        goalId,
+        user.id,
+        user.full_name || user.email,
+        'task_created',
+        {
+          task_id: result.data?.id as string,
+          task_title: title
+        }
+      )
+    } catch (error) {
+      console.error("Failed to add task creation workflow entry:", error)
+      // Don't fail the task creation for this
     }
 
     revalidatePath(`/dashboard/goals/${goalId}`)
@@ -118,9 +156,18 @@ export async function createBulkTasks(goalId: string, tasks: Array<{
 
     const goal = goalResult.data
     const canCreateTask = goal.owner_id === user.id || 
-                         goal.current_assignee_id === user.id ||
                          user.role === "Admin" ||
                          (user.role === "Head" && goal.department === user.department)
+    
+    // Also check if user is in goal assignees (unified permission system)
+    if (!canCreateTask) {
+      const { getGoalAssignees } = require("@/lib/goal-database")
+      const assignees = await getGoalAssignees(goal.id)
+      const isAssignee = assignees.data?.some((a: any) => a.user_id === user.id)
+      if (!isAssignee) {
+        return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
+      }
+    }
     
     if (!canCreateTask) {
       return { error: "Only goal owners, assignees, admins, and department heads can create tasks" }
@@ -144,6 +191,26 @@ export async function createBulkTasks(goalId: string, tasks: Array<{
             { task_id: task.id, task_title: task.title, goal_id: goalId }
           )
         }
+      }
+    }
+
+    // Add workflow entry for bulk task creation
+    if (result.data && result.data.length > 0) {
+      try {
+        const taskTitles = result.data.map((task: any) => task.title as string)
+        await addTaskWorkflowEntry(
+          goalId,
+          user.id,
+          user.full_name || user.email,
+          'tasks_bulk_created',
+          {
+            task_count: result.data.length,
+            task_titles: taskTitles
+          }
+        )
+      } catch (error) {
+        console.error("Failed to add bulk task creation workflow entry:", error)
+        // Don't fail the task creation for this
       }
     }
 
@@ -176,7 +243,49 @@ export async function updateTask(taskId: string, updates: {
       return { error: "Task ID is required" }
     }
 
-    // For now, we'll allow task updates - could add more granular permissions later
+    // Get task details with goal information for permission checking
+    const { createClient } = require("@supabase/supabase-js")
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    let taskData: any = null
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data, error: taskError } = await supabase
+        .from("goal_tasks")
+        .select(`
+          *,
+          goal:goals(id, owner_id, current_assignee_id, department)
+        `)
+        .eq("id", taskId)
+        .single()
+
+      if (taskError || !data) {
+        return { error: "Task not found" }
+      }
+
+      taskData = data
+
+      // Permission check: only allow task updates by:
+      // 1. Goal owner, 2. Goal assignee, 3. Task assignee, 4. Admin, 5. Department head
+      let canUpdate = taskData.goal.owner_id === user.id ||
+                     taskData.assigned_to === user.id ||
+                     user.role === 'Admin' ||
+                     (user.role === 'Head' && taskData.goal.department === user.department)
+      
+      // Also check if user is in goal assignees (unified permission system)
+      if (!canUpdate) {
+        const { getGoalAssignees } = require("@/lib/goal-database")
+        const assignees = await getGoalAssignees(taskData.goal.id)
+        canUpdate = assignees.data?.some((a: any) => a.user_id === user.id) || false
+      }
+
+      if (!canUpdate) {
+        return { error: "You don't have permission to update this task" }
+      }
+    }
+
     const result = await updateGoalTask(taskId, updates)
 
     if (result.error) {
@@ -193,6 +302,26 @@ export async function updateTask(taskId: string, updates: {
         `A task has been reassigned to you: "${updates.title || 'Unnamed Task'}"`,
         { task_id: taskId, goal_id: result.data?.goal_id || '' }
       )
+    }
+
+    // Add workflow entry for task edit (only if we have task data from the permission check)
+    if (taskData) {
+      try {
+        await addTaskWorkflowEntry(
+          taskData.goal.id,
+          user.id,
+          user.full_name || user.email,
+          'task_edited',
+          {
+            task_id: taskId,
+            task_title: updates.title || taskData.title,
+            changes: updates
+          }
+        )
+      } catch (error) {
+        console.error("Failed to add task edit workflow entry:", error)
+        // Don't fail the task update for this
+      }
     }
 
     revalidatePath("/dashboard")
@@ -213,10 +342,53 @@ export async function completeTask(taskId: string, completionNotes?: string) {
       return { error: "Task ID is required" }
     }
 
+    // Get task details for workflow entry before completing
+    const { createClient } = require("@supabase/supabase-js")
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    let taskData = null
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data, error: taskError } = await supabase
+        .from("goal_tasks")
+        .select(`
+          *,
+          goal:goals(id, owner_id, current_assignee_id, department)
+        `)
+        .eq("id", taskId)
+        .single()
+
+      if (!taskError && data) {
+        taskData = data
+      }
+    }
+
     const result = await completeGoalTask(taskId, user.id, completionNotes)
 
     if (result.error) {
       return { error: "Failed to complete task. Make sure you are assigned to this task." }
+    }
+
+    // Add workflow entry for task completion
+    if (taskData) {
+      try {
+        await addTaskWorkflowEntry(
+          taskData.goal.id,
+          user.id,
+          user.full_name || user.email,
+          'task_completed',
+          {
+            task_id: taskId,
+            task_title: taskData.title,
+            completion_notes: completionNotes
+          }
+        )
+      } catch (error) {
+        console.error("Failed to add task completion workflow entry:", error)
+        // Don't fail the task completion for this
+      }
     }
 
     revalidatePath("/dashboard")
@@ -237,8 +409,62 @@ export async function deleteTask(taskId: string) {
       return { error: "Task ID is required" }
     }
 
-    // Only goal owners should be able to delete tasks
-    // This would require fetching the task first to check the goal ownership
+    // Get task details with goal information for permission checking
+    const { createClient } = require("@supabase/supabase-js")
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data: taskData, error: taskError } = await supabase
+        .from("goal_tasks")
+        .select(`
+          *,
+          goal:goals(id, owner_id, current_assignee_id, department)
+        `)
+        .eq("id", taskId)
+        .single()
+
+      if (taskError || !taskData) {
+        return { error: "Task not found" }
+      }
+
+      // Permission check: only allow task deletion by:
+      // 1. Goal owner, 2. Goal assignee, 3. Admin, 4. Department head (more restrictive than update)
+      let canDelete = taskData.goal.owner_id === user.id ||
+                     user.role === 'Admin' ||
+                     (user.role === 'Head' && taskData.goal.department === user.department)
+      
+      // Also check if user is in goal assignees (unified permission system)
+      if (!canDelete) {
+        const { getGoalAssignees } = require("@/lib/goal-database")
+        const assignees = await getGoalAssignees(taskData.goal.id)
+        canDelete = assignees.data?.some((a: any) => a.user_id === user.id) || false
+      }
+
+      if (!canDelete) {
+        return { error: "You don't have permission to delete this task" }
+      }
+
+      // Add workflow entry for task deletion before actually deleting
+      try {
+        await addTaskWorkflowEntry(
+          taskData.goal.id,
+          user.id,
+          user.full_name || user.email,
+          'task_deleted',
+          {
+            task_id: taskId,
+            task_title: taskData.title
+          }
+        )
+      } catch (error) {
+        console.error("Failed to add task deletion workflow entry:", error)
+        // Don't fail the task deletion for this
+      }
+    }
+
     const result = await deleteGoalTask(taskId)
 
     if (result.error) {
@@ -328,12 +554,56 @@ export async function startTask(taskId: string) {
       return { error: "Task ID is required" }
     }
 
+    // Get task details for workflow entry before starting
+    const { createClient } = require("@supabase/supabase-js")
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    let taskData = null
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data, error: taskError } = await supabase
+        .from("goal_tasks")
+        .select(`
+          *,
+          goal:goals(id, owner_id, current_assignee_id, department)
+        `)
+        .eq("id", taskId)
+        .single()
+
+      if (!taskError && data) {
+        taskData = data
+      }
+    }
+
     const result = await updateGoalTask(taskId, { 
       status: 'in_progress'
     })
 
     if (result.error) {
       return { error: "Failed to start task" }
+    }
+
+    // Add workflow entry for task start
+    if (taskData) {
+      try {
+        await addTaskWorkflowEntry(
+          taskData.goal.id,
+          user.id,
+          user.full_name || user.email,
+          'task_started',
+          {
+            task_id: taskId,
+            task_title: taskData.title,
+            previous_status: taskData.status,
+            new_status: 'in_progress'
+          }
+        )
+      } catch (error) {
+        console.error("Failed to add task start workflow entry:", error)
+        // Don't fail the task start for this
+      }
     }
 
     revalidatePath("/dashboard")

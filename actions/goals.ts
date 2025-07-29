@@ -13,7 +13,6 @@ import {
   assignGoalAssignees as dbAssignGoalAssignees,
   getGoalAssignees,
   completeAssigneeTask,
-  areAllAssigneesComplete,
   createGoalSupport,
   updateGoalSupport,
   getUserById,
@@ -71,6 +70,7 @@ export async function createGoal(formData: FormData) {
     const priority = formData.get("priority") as string
     const department = formData.get("department") as string
     const teams = formData.get("teams") as string
+    const startDate = formData.get("start_date") as string
     const targetDate = formData.get("target_date") as string
     const targetMetrics = formData.get("target_metrics") as string
     const successCriteria = formData.get("success_criteria") as string
@@ -87,6 +87,15 @@ export async function createGoal(formData: FormData) {
       return { error: "Department is required" }
     }
 
+    // Date validation: start_date <= target_date
+    if (startDate && targetDate) {
+      const start = new Date(startDate)
+      const target = new Date(targetDate)
+      if (start > target) {
+        return { error: "Start date cannot be later than target date" }
+      }
+    }
+
     // Create initial workflow history entry
     const workflowComment = "Goal created and entered Plan phase"
     
@@ -101,10 +110,23 @@ export async function createGoal(formData: FormData) {
       comment: workflowComment
     }]
 
+    // Add start date history entry if provided
+    if (startDate) {
+      initialWorkflowHistory.push({
+        id: `history-${Date.now() + 1}`,
+        timestamp: new Date().toISOString(),
+        user_id: user.id,
+        user_name: user.full_name || user.email,
+        action: "start_date_set",
+        new_start_date: startDate,
+        comment: `Owner set start date to ${new Date(startDate).toLocaleDateString()}`
+      } as any)
+    }
+
     // Add target date history entry if provided
     if (targetDate) {
       initialWorkflowHistory.push({
-        id: `history-${Date.now() + 1}`,
+        id: `history-${Date.now() + 2}`,
         timestamp: new Date().toISOString(),
         user_id: user.id,
         user_name: user.full_name || user.email,
@@ -125,6 +147,7 @@ export async function createGoal(formData: FormData) {
       priority,
       department,
       teams: teamsArray,
+      start_date: startDate || undefined,
       target_date: targetDate || undefined,
       target_metrics: targetMetrics || undefined,
       success_criteria: successCriteria || undefined,
@@ -132,7 +155,7 @@ export async function createGoal(formData: FormData) {
       owner_id: user.id,
       workflow_history: initialWorkflowHistory,
       status: "Plan",
-      current_assignee_id: user.id, // Owner starts as assignee
+      current_assignee_id: undefined, // Use goal_assignees table for assignments instead
     })
 
     if (result.error) {
@@ -141,6 +164,16 @@ export async function createGoal(formData: FormData) {
     }
 
     data = result.data
+
+    // Automatically assign the goal owner as the primary assignee
+    if (data?.id) {
+      try {
+        await dbAssignGoalAssignees(data.id as string, [user.id], user.id)
+      } catch (error) {
+        console.error("Error assigning goal owner:", error)
+        // Don't fail goal creation for this
+      }
+    }
 
     // Handle support requirements with new structure
     if (data?.id && supportRequirements) {
@@ -155,7 +188,7 @@ export async function createGoal(formData: FormData) {
             support_type: "Department",
             support_name: requirement.department,
             requested_by: user.id,
-            status: "Requested"
+            status: "Accepted"
           })
 
           // Create support for each team within the department
@@ -166,7 +199,7 @@ export async function createGoal(formData: FormData) {
               support_name: team,
               support_department: requirement.department, // New field to link team to department
               requested_by: user.id,
-              status: "Requested"
+              status: "Accepted"
             })
           }
         }
@@ -186,9 +219,9 @@ export async function createGoal(formData: FormData) {
         const createdGoal = await getGoalById(data.id as string)
         if (createdGoal.data && initialWorkflowHistory.length > 0) {
           await createNotificationsForGoalAction(
-            data.id as string, 
-            initialWorkflowHistory[0].action, 
-            { userId: user.id, goalData: createdGoal.data }
+            createdGoal.data,
+            initialWorkflowHistory[0],
+            user.id
           )
         }
       } catch (error) {
@@ -247,13 +280,9 @@ export async function createGoal(formData: FormData) {
     return { error: "Failed to create goal" }
   }
 
-  // Redirects must be outside try-catch to avoid catching NEXT_REDIRECT errors
+  // Revalidate paths and return the goal data for client-side navigation
   revalidatePath("/dashboard")
-  if (data?.id) {
-    redirect(`/goals/${data.id}`)
-  } else {
-    redirect("/dashboard")
-  }
+  return { success: true, data }
 }
 
 export async function addGoalComment(goalId: string, comment: string) {
@@ -281,7 +310,7 @@ export async function addGoalComment(goalId: string, comment: string) {
           timestamp: new Date().toISOString(),
           comment: comment
         }
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     } catch (error) {
       console.error("Error creating comment notifications:", error)
@@ -430,10 +459,7 @@ export async function updateGoalStatus(goalId: string, status: string, currentAs
       // Goal owner can always update their goals
       if (currentGoal.owner_id === userId) return true
       
-      // Current assignee can update status
-      if (currentGoal.current_assignee_id === userId) return true
-      
-      // Check if user is in assignees list
+      // Check if user is in assignees list (unified permission system)
       const assignees = await getGoalAssignees(goalId)
       if (assignees.data?.some(a => a.user_id === userId)) return true
       
@@ -493,7 +519,7 @@ export async function updateGoalStatus(goalId: string, status: string, currentAs
     try {
       const updatedGoal = await getGoalById(goalId)
       if (updatedGoal.data) {
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     } catch (error) {
       console.error("Error creating status change notifications:", error)
@@ -561,7 +587,7 @@ export async function updateGoalDetails(goalId: string, updates: {
       // Add to workflow history
       const updatedGoal = await getGoalById(goalId)
       if (updatedGoal.data) {
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     }
 
@@ -611,7 +637,7 @@ export async function assignGoalAssignees(goalId: string, assigneeIds: string[])
           timestamp: new Date().toISOString(),
           assignees: assigneeIds
         }
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     } catch (error) {
       console.error("Error creating assignment notifications:", error)
@@ -646,35 +672,7 @@ export async function completeGoalAssigneeTask(goalId: string, assigneeId: strin
       return { error: "Failed to complete task" }
     }
 
-    // Check if all assignees are complete
-    const allComplete = await areAllAssigneesComplete(goalId)
-    if (allComplete.data) {
-      // Automatically progress to next PDCA stage
-      const goalResult = await getGoalById(goalId)
-      if (goalResult.data) {
-        const currentStatus = goalResult.data.status as string
-        let nextStatus: string = currentStatus
-        
-        switch (currentStatus) {
-          case "Plan":
-            nextStatus = "Do"
-            break
-          case "Do":
-            nextStatus = "Check"
-            break
-          case "Check":
-            nextStatus = "Act"
-            break
-          case "Act":
-            nextStatus = "Completed"
-            break
-        }
-
-        if (nextStatus !== currentStatus) {
-          await updateGoalStatus(goalId, nextStatus)
-        }
-      }
-    }
+    // Manual progression only - automatic progression removed as per CLAUDE.md architecture decision
 
     // Create notification for task completion
     try {
@@ -686,7 +684,7 @@ export async function completeGoalAssigneeTask(goalId: string, assigneeId: strin
           timestamp: new Date().toISOString(),
           notes: notes
         }
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     } catch (error) {
       console.error("Error creating task completion notifications:", error)
@@ -759,7 +757,7 @@ export async function updateGoalSupportStatus(goalId: string, supportId: string,
           support_status: status,
           notes: notes
         }
-        // await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }
     } catch (error) {
       console.error("Error creating support status notifications:", error)
@@ -789,18 +787,7 @@ export async function markGoalAssigneeTaskComplete(goalId: string, userId: strin
   try {
     const result = await completeAssigneeTask(goalId, userId, notes)
     
-    // Check if all assignees are complete
-    const allComplete = await areAllAssigneesComplete(goalId)
-    if (allComplete) {
-      // Auto-progress to next PDCA stage
-      const goal = await getGoalById(goalId)
-      if (goal.data) {
-        const nextStatus = getNextPDCAStatus(goal.data.status as string)
-        if (nextStatus) {
-          await dbUpdateGoalStatus(goalId, nextStatus)
-        }
-      }
-    }
+    // Manual progression only - automatic progression removed as per CLAUDE.md architecture decision
     
     revalidatePath(`/dashboard/goals/${goalId}`)
     return result
@@ -810,12 +797,3 @@ export async function markGoalAssigneeTaskComplete(goalId: string, userId: strin
   }
 }
 
-function getNextPDCAStatus(currentStatus: string): string | null {
-  const transitions: Record<string, string> = {
-    "Plan": "Do",
-    "Do": "Check", 
-    "Check": "Act",
-    "Act": "Completed"
-  }
-  return transitions[currentStatus] || null
-}

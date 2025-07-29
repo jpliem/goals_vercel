@@ -33,6 +33,7 @@ export interface Goal {
   success_criteria: string | null;
   owner_id: string;
   current_assignee_id: string | null;
+  start_date: string | null;
   target_date: string | null;
   adjusted_target_date: string | null;
   assignment_history: any[];
@@ -81,6 +82,7 @@ export interface GoalTask {
   assigned_by: string | null;
   assigned_user?: UserRecord | null;
   department: string | null;
+  start_date: string | null;
   due_date: string | null;
   estimated_hours: number;
   actual_hours: number;
@@ -156,6 +158,7 @@ const mockGoals: GoalWithDetails[] = [
     success_criteria: 'Achieve CSAT score of 8.5+ for 3 consecutive months',
     owner_id: '550e8400-e29b-41d4-a716-446655440002',
     current_assignee_id: '550e8400-e29b-41d4-a716-446655440002',
+    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago (already started)
     target_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
     adjusted_target_date: null,
     assignment_history: [],
@@ -238,6 +241,7 @@ const mockGoals: GoalWithDetails[] = [
     success_criteria: 'Consistent 10.5 day average for 6 weeks',
     owner_id: '550e8400-e29b-41d4-a716-446655440001',
     current_assignee_id: '550e8400-e29b-41d4-a716-446655440001',
+    start_date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(), // 21 days ago (already started)
     target_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days from now
     adjusted_target_date: null,
     assignment_history: [],
@@ -305,6 +309,7 @@ const mockGoals: GoalWithDetails[] = [
     success_criteria: 'All new hires complete training in 20 days with 90%+ satisfaction',
     owner_id: '550e8400-e29b-41d4-a716-446655440003',
     current_assignee_id: '550e8400-e29b-41d4-a716-446655440003',
+    start_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now (scheduled for future)
     target_date: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // 60 days from now
     adjusted_target_date: null,
     assignment_history: [],
@@ -352,6 +357,7 @@ export async function createGoal(goalData: {
   priority: string
   department: string
   teams?: string[]
+  start_date?: string
   target_date?: string
   target_metrics?: string
   success_criteria?: string
@@ -615,10 +621,75 @@ export async function updateGoalStatus(
   }
 }
 
+// Helper function to add task-related workflow entries
+export async function addTaskWorkflowEntry(
+  goalId: string,
+  userId: string,
+  userName: string,
+  action: 'task_created' | 'task_completed' | 'task_deleted' | 'task_edited' | 'task_started' | 'tasks_bulk_created',
+  details: {
+    task_id?: string
+    task_title?: string
+    task_titles?: string[]
+    task_count?: number
+    changes?: any
+    completion_notes?: string
+    previous_status?: string
+    new_status?: string
+  }
+) {
+  try {
+    if (!supabaseAdmin) {
+      return { data: null, error: null }
+    }
+
+    // Get current workflow history
+    const { data: currentGoal } = await supabaseAdmin
+      .from("goals")
+      .select("workflow_history")
+      .eq("id", goalId)
+      .single()
+
+    if (!currentGoal) {
+      return { data: null, error: "Goal not found" }
+    }
+
+    const currentHistory = Array.isArray(currentGoal.workflow_history) ? currentGoal.workflow_history : []
+    
+    // Create new workflow entry
+    const workflowEntry = {
+      id: `history-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      user_id: userId,
+      user_name: userName,
+      action,
+      details
+    }
+
+    // Update goal with new workflow history
+    const { data, error } = await supabaseAdmin
+      .from("goals")
+      .update({
+        workflow_history: [...currentHistory, workflowEntry],
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", goalId)
+      .select()
+      .single()
+
+    return { data, error }
+  } catch (error) {
+    console.error("Add task workflow entry error:", error)
+    return { data: null, error: error }
+  }
+}
+
 export async function updateGoalDetails(goalId: string, updates: {
   subject?: string
   description?: string
   priority?: string
+  start_date?: string
   target_date?: string
   adjusted_target_date?: string
   target_metrics?: string
@@ -829,6 +900,44 @@ export async function updateGoalSupport(supportId: string, updates: {
     return { data, error }
   } catch (error) {
     console.error("Update goal support error:", error)
+    return { data: null, error: error }
+  }
+}
+
+export async function getGoalsWithSupportRequests(department: string) {
+  try {
+    if (!supabaseAdmin) {
+      // Return mock data - filter goals that have support requests for this department
+      const supportGoals = mockGoals.filter(g => 
+        g.support && g.support.some((s: any) => s.support_name === department)
+      )
+      return { data: supportGoals, error: null }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("goal_support")
+      .select(`
+        goals!goal_support_goal_id_fkey(
+          *,
+          owner:users!goals_owner_id_fkey(*),
+          current_assignee:users!goals_current_assignee_id_fkey(*),
+          assignees:goal_assignees(*, user:users(*)),
+          tasks:goal_tasks(*, 
+            assigned_user:users!goal_tasks_assigned_to_fkey(*), 
+            assigned_by_user:users!goal_tasks_assigned_by_fkey(*)
+          ),
+          support:goal_support(*)
+        )
+      `)
+      .eq("support_name", department)
+      .eq("status", "Accepted")
+      
+    // Extract goals from the support request results
+    const goals = data?.map((item: any) => item.goals).filter(Boolean) || []
+
+    return { data: goals, error }
+  } catch (error) {
+    console.error("Get goals with support requests error:", error)
     return { data: null, error: error }
   }
 }
@@ -1111,6 +1220,7 @@ export async function createGoalTask(taskData: {
   assigned_to?: string;
   assigned_by: string;
   department?: string;
+  start_date?: string;
   due_date?: string;
   estimated_hours?: number;
   order_index?: number;
@@ -1351,16 +1461,34 @@ export async function completeGoalTask(taskId: string, userId: string, completio
       }
     }
 
+    // First, get the task to check assignment status
+    const { data: taskCheck, error: checkError } = await supabaseAdmin
+      .from("goal_tasks")
+      .select("id, assigned_to, title, goal_id")
+      .eq("id", taskId)
+      .single()
+
+    if (checkError || !taskCheck) {
+      return { data: null, error: "Task not found" }
+    }
+
+    // If task is unassigned, automatically assign it to the completing user
+    // If task is assigned, ensure it's assigned to the current user
+    if (taskCheck.assigned_to && taskCheck.assigned_to !== userId) {
+      return { data: null, error: "You can only complete tasks assigned to you" }
+    }
+
     const { data, error } = await supabaseAdmin
       .from("goal_tasks")
       .update({
         status: 'completed',
         completed_at: new Date().toISOString(),
         completed_by: userId,
-        completion_notes: completionNotes || null
+        completion_notes: completionNotes || null,
+        // Auto-assign unassigned tasks when completing them
+        assigned_to: taskCheck.assigned_to || userId
       })
       .eq("id", taskId)
-      .eq("assigned_to", userId) // Ensure only assigned user can complete
       .select()
       .single()
 

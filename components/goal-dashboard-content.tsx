@@ -13,6 +13,11 @@ interface GoalDashboardContentProps {
 }
 
 export function GoalDashboardContent({ userProfile, goals, userDepartmentPermissions, departmentTeamMappings = {}, users = [] }: GoalDashboardContentProps) {
+  const handleGoalCreated = () => {
+    // Refresh the page to show the new goal in the dashboard
+    window.location.reload()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardHeader 
@@ -26,6 +31,7 @@ export function GoalDashboardContent({ userProfile, goals, userDepartmentPermiss
         currentTab="overview"
         departmentTeamMappings={departmentTeamMappings}
         users={users as any}
+        onGoalCreated={handleGoalCreated}
       />
 
       <main className="max-w-7xl mx-auto py-4 sm:px-6 lg:px-8">

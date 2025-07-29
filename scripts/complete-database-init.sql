@@ -96,6 +96,7 @@ CREATE TABLE public.goals (
     previous_status TEXT,
     department TEXT NOT NULL,
     teams TEXT[] DEFAULT '{}',
+    start_date TIMESTAMP WITH TIME ZONE,
     target_date TIMESTAMP WITH TIME ZONE,
     adjusted_target_date TIMESTAMP WITH TIME ZONE,
     target_metrics TEXT,
@@ -203,6 +204,7 @@ CREATE TABLE public.goal_tasks (
     assigned_to UUID REFERENCES public.users(id) ON DELETE SET NULL,
     assigned_by UUID REFERENCES public.users(id),
     department TEXT,
+    start_date TIMESTAMP WITH TIME ZONE,
     due_date TIMESTAMP WITH TIME ZONE,
     estimated_hours INTEGER DEFAULT 0,
     actual_hours INTEGER DEFAULT 0,
@@ -232,6 +234,7 @@ CREATE INDEX idx_goals_status ON public.goals(status);
 CREATE INDEX idx_goals_priority ON public.goals(priority);
 CREATE INDEX idx_goals_department ON public.goals(department);
 CREATE INDEX idx_goals_created_at ON public.goals(created_at);
+CREATE INDEX idx_goals_start_date ON public.goals(start_date);
 CREATE INDEX idx_goals_target_date ON public.goals(target_date);
 
 -- Goal assignees indexes
@@ -246,6 +249,7 @@ CREATE INDEX idx_goal_tasks_goal_id ON public.goal_tasks(goal_id);
 CREATE INDEX idx_goal_tasks_assigned_to ON public.goal_tasks(assigned_to);
 CREATE INDEX idx_goal_tasks_status ON public.goal_tasks(status);
 CREATE INDEX idx_goal_tasks_priority ON public.goal_tasks(priority);
+CREATE INDEX idx_goal_tasks_start_date ON public.goal_tasks(start_date);
 CREATE INDEX idx_goal_tasks_due_date ON public.goal_tasks(due_date);
 CREATE INDEX idx_goal_tasks_department ON public.goal_tasks(department);
 CREATE INDEX idx_goal_tasks_goal_order ON public.goal_tasks(goal_id, order_index);

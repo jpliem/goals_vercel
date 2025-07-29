@@ -43,6 +43,9 @@ import {
   createTeam,
   deleteDepartment,
   deleteTeam,
+  renameDepartment,
+  renameTeam,
+  updateDepartmentDescription,
   getDepartmentUsageStats
 } from "@/actions/department-management"
 
@@ -69,6 +72,20 @@ export function DepartmentManagement() {
     department: string
     team?: string
   }>({ open: false, type: 'department', department: '' })
+  
+  const [editDeptModal, setEditDeptModal] = useState<{
+    open: boolean
+    department: string
+    newName: string
+    description: string
+  }>({ open: false, department: '', newName: '', description: '' })
+  
+  const [editTeamModal, setEditTeamModal] = useState<{
+    open: boolean
+    department: string
+    team: string
+    newName: string
+  }>({ open: false, department: '', team: '', newName: '' })
   
   // Form states
   const [newDeptName, setNewDeptName] = useState("")
@@ -180,6 +197,70 @@ export function DepartmentManagement() {
       } else {
         toast.success(result.message)
         setDeleteModal({ open: false, type: 'department', department: '' })
+        loadData()
+      }
+    } catch (error) {
+      toast.error("An unexpected error occurred")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRenameDepartment = async () => {
+    if (!editDeptModal.newName.trim()) {
+      toast.error("Department name is required")
+      return
+    }
+
+    setActionLoading(true)
+    try {
+      const result = await renameDepartment(editDeptModal.department, editDeptModal.newName.trim())
+      if (result.error) {
+        toast.error("Failed to rename department", { description: result.error })
+      } else {
+        toast.success(result.message)
+        setEditDeptModal({ open: false, department: '', newName: '', description: '' })
+        loadData()
+      }
+    } catch (error) {
+      toast.error("An unexpected error occurred")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleUpdateDepartmentDescription = async () => {
+    setActionLoading(true)
+    try {
+      const result = await updateDepartmentDescription(editDeptModal.department, editDeptModal.description)
+      if (result.error) {
+        toast.error("Failed to update description", { description: result.error })
+      } else {
+        toast.success(result.message)
+        setEditDeptModal({ open: false, department: '', newName: '', description: '' })
+        loadData()
+      }
+    } catch (error) {
+      toast.error("An unexpected error occurred")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRenameTeam = async () => {
+    if (!editTeamModal.newName.trim()) {
+      toast.error("Team name is required")
+      return
+    }
+
+    setActionLoading(true)
+    try {
+      const result = await renameTeam(editTeamModal.department, editTeamModal.team, editTeamModal.newName.trim())
+      if (result.error) {
+        toast.error("Failed to rename team", { description: result.error })
+      } else {
+        toast.success(result.message)
+        setEditTeamModal({ open: false, department: '', team: '', newName: '' })
         loadData()
       }
     } catch (error) {
@@ -309,18 +390,33 @@ export function DepartmentManagement() {
                           </Badge>
                         )}
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteModal({
-                          open: true,
-                          type: 'department',
-                          department: dept
-                        })}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditDeptModal({
+                            open: true,
+                            department: dept,
+                            newName: dept,
+                            description: ''
+                          })}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteModal({
+                            open: true,
+                            type: 'department',
+                            department: dept
+                          })}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Teams List */}
@@ -336,19 +432,34 @@ export function DepartmentManagement() {
                                 <Users className="w-4 h-4 text-gray-600" />
                                 <span className="text-sm font-medium">{team}</span>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setDeleteModal({
-                                  open: true,
-                                  type: 'team',
-                                  department: dept,
-                                  team
-                                })}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-6 w-6 p-0"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditTeamModal({
+                                    open: true,
+                                    department: dept,
+                                    team,
+                                    newName: team
+                                  })}
+                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-6 w-6 p-0"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDeleteModal({
+                                    open: true,
+                                    type: 'team',
+                                    department: dept,
+                                    team
+                                  })}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 h-6 w-6 p-0"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -437,6 +548,95 @@ export function DepartmentManagement() {
             <Button onClick={handleCreateTeam} disabled={actionLoading}>
               {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Department Modal */}
+      <Dialog open={editDeptModal.open} onOpenChange={(open) => 
+        setEditDeptModal(prev => ({ ...prev, open }))
+      }>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Department</DialogTitle>
+            <DialogDescription>
+              Update the department name and description. This will update all related records.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-dept-name">Department Name</Label>
+              <Input
+                id="edit-dept-name"
+                value={editDeptModal.newName}
+                onChange={(e) => setEditDeptModal(prev => ({ ...prev, newName: e.target.value }))}
+                placeholder="Enter department name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-dept-description">Description (Optional)</Label>
+              <Input
+                id="edit-dept-description"
+                value={editDeptModal.description}
+                onChange={(e) => setEditDeptModal(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Enter department description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setEditDeptModal({ open: false, department: '', newName: '', description: '' })}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleRenameDepartment}
+              disabled={actionLoading || !editDeptModal.newName.trim()}
+            >
+              {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Update Department
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Team Modal */}
+      <Dialog open={editTeamModal.open} onOpenChange={(open) => 
+        setEditTeamModal(prev => ({ ...prev, open }))
+      }>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Team</DialogTitle>
+            <DialogDescription>
+              Update the team name in "{editTeamModal.department}" department. This will update all related records.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-team-name">Team Name</Label>
+              <Input
+                id="edit-team-name"
+                value={editTeamModal.newName}
+                onChange={(e) => setEditTeamModal(prev => ({ ...prev, newName: e.target.value }))}
+                placeholder="Enter team name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setEditTeamModal({ open: false, department: '', team: '', newName: '' })}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleRenameTeam}
+              disabled={actionLoading || !editTeamModal.newName.trim()}
+            >
+              {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Update Team
             </Button>
           </DialogFooter>
         </DialogContent>

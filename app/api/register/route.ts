@@ -25,7 +25,7 @@ if (hasRequiredEnvVars) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, full_name, department, role = "Employee" } = await request.json()
+    const { email, password, full_name, department, team = null, role = "Employee" } = await request.json()
 
     // Validation
     if (!email || !password || !full_name || !department) {
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
           email: email.toLowerCase().trim(),
           full_name: full_name.trim(),
           department,
+          team,
           role
         }
       })
@@ -87,8 +88,8 @@ export async function POST(request: NextRequest) {
           password, // In production, you should hash this
           full_name: full_name.trim(),
           department,
+          team: team || null,
           role,
-          team: null,
           skills: [],
           is_active: true
         }

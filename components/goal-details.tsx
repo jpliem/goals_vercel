@@ -44,7 +44,6 @@ import {
 } from "@/actions/goals"
 import { getGoalAttachments, deleteGoalAttachment, uploadMultipleGoalAttachments } from "@/actions/goal-attachments"
 import { FileUpload } from "@/components/ui/file-upload"
-import { PDCAProgress } from "@/components/pdca-progress"
 import { GoalWorkflowHistory } from "@/components/goal-workflow-history"
 import { EditGoalModal } from "@/components/modals/edit-goal-modal"
 import { AssigneesStakeholdersCard } from "@/components/assignees-stakeholders-card"
@@ -283,6 +282,14 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   )}
                 </div>
                 
+                {goal.start_date && (
+                  <div className="flex items-center gap-1 text-sm text-gray-600">
+                    <Clock className="h-4 w-4" />
+                    <span>Start: {new Date(goal.start_date).toLocaleDateString()}</span>
+                    {new Date(goal.start_date) > new Date() && <Badge variant="outline" className="text-xs">Scheduled</Badge>}
+                  </div>
+                )}
+
                 {goal.target_date && (
                   <div className={`flex items-center gap-1 text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
                     <Calendar className="h-4 w-4" />
@@ -410,319 +417,298 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
 
         {/* Tab-based Layout */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="progress">Progress</TabsTrigger>
-            <TabsTrigger value="comments">Comments</TabsTrigger>
-            <TabsTrigger value="files">Files</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Goal Information */}
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <FileText className="h-5 w-5 text-green-600" />
-                    Goal Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 p-4">
-                  <div>
-                    <Label className="text-sm font-medium mb-3 block">Description</Label>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                      {goal.description || 'No description provided'}
-                    </p>
-                  </div>
-
-                  {goal.target_metrics && (
-                    <div className="border-t pt-4">
-                      <Label className="text-sm font-medium mb-3 block">Target Metrics</Label>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.target_metrics}</p>
+              {/* Left Column: Goal Information and Assignees */}
+              <div className="space-y-6">
+                {/* Goal Information */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                      <FileText className="h-5 w-5 text-green-600" />
+                      Goal Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6 p-4">
+                    <div>
+                      <Label className="text-sm font-medium mb-3 block">Description</Label>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {goal.description || 'No description provided'}
+                      </p>
                     </div>
-                  )}
 
-                  {goal.success_criteria && (
-                    <div className="border-t pt-4">
-                      <Label className="text-sm font-medium mb-3 block">Success Criteria</Label>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.success_criteria}</p>
-                    </div>
-                  )}
-
-                  <div className="border-t pt-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">Created</Label>
-                        <p className="text-gray-700">{new Date(goal.created_at).toLocaleDateString()}</p>
+                    {goal.target_metrics && (
+                      <div className="border-t pt-4">
+                        <Label className="text-sm font-medium mb-3 block">Target Metrics</Label>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.target_metrics}</p>
                       </div>
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">Last Updated</Label>
-                        <p className="text-gray-700">{new Date(goal.updated_at).toLocaleDateString()}</p>
+                    )}
+
+                    {goal.success_criteria && (
+                      <div className="border-t pt-4">
+                        <Label className="text-sm font-medium mb-3 block">Success Criteria</Label>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.success_criteria}</p>
                       </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    )}
 
-              {/* Assignees & Stakeholders */}
-              <AssigneesStakeholdersCard goal={goal} assignees={assignees} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="tasks" className="mt-6">
-            <GoalTasksCard
-              goalId={goal.id}
-              currentUser={userProfile}
-              users={users}
-              isOwner={isOwner}
-              isAssignee={isAnyAssignee}
-              currentGoalStatus={goal.status}
-              goalDepartment={goal.department}
-            />
-          </TabsContent>
-
-          <TabsContent value="progress" className="mt-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* PDCA Progress & Actions */}
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <TrendingUp className="h-5 w-5 text-blue-600" />
-                    PDCA Progress & Workflow
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 p-4">
-                  <PDCAProgress
-                    currentStatus={goal.status}
-                    previousStatus={goal.previous_status}
-                    goalType={goal.goal_type as "Team" | "Department" | "Personal" | "Company"}
-                    goal={{
-                      owner: goal.owner || undefined,
-                      current_assignee: goal.current_assignee || undefined
-                    }}
-                    assignees={assignees.map(a => ({
-                      assignee_name: (a as any)?.users?.full_name || 'Unknown',
-                      task_status: a.task_status as "completed" | "pending"
-                    }))}
-                  />
-
-
-                  {/* Task Completion for Multi-Assignees */}
-                  {isMultiAssignee && goal.status !== "Completed" && (
                     <div className="border-t pt-4">
-                      <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                        <h4 className="font-medium text-sm mb-4 flex items-center gap-2 text-green-900">
-                          <CheckCircle className="h-4 w-4" />
-                          Complete Your Task
-                        </h4>
-                        <div className="space-y-3">
-                          <Textarea
-                            placeholder="Add completion notes (optional)"
-                            value={taskCompletionNotes}
-                            onChange={(e) => setTaskCompletionNotes(e.target.value)}
-                            rows={2}
-                            className="text-sm"
-                          />
-                          <Button 
-                            onClick={handleCompleteTask}
-                            disabled={isLoading}
-                            size="sm"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Mark My Task Complete
-                          </Button>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">Created</Label>
+                          <p className="text-gray-700">{new Date(goal.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium mb-2 block">Last Updated</Label>
+                          <p className="text-gray-700">{new Date(goal.updated_at).toLocaleDateString()}</p>
                         </div>
                       </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Workflow History */}
-              <Card className="shadow-sm">
+                {/* Assignees & Stakeholders */}
+                <AssigneesStakeholdersCard goal={goal} assignees={assignees} />
+              </div>
+
+              {/* Right Column: Tasks */}
+              <div className="space-y-6">
+                <GoalTasksCard
+                  goalId={goal.id}
+                  currentUser={userProfile}
+                  users={users}
+                  isOwner={isOwner}
+                  isAssignee={isAnyAssignee}
+                  currentGoalStatus={goal.status}
+                  goalDepartment={goal.department}
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-6">
+            {/* Workflow History - Now in its own dedicated tab */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <History className="h-5 w-5 text-gray-600" />
+                  Goal Activity & History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
+              </CardContent>
+            </Card>
+
+            {/* Task Completion for Multi-Assignees */}
+            {isMultiAssignee && goal.status !== "Completed" && (
+              <Card className="shadow-sm mt-6">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <History className="h-5 w-5 text-gray-600" />
-                    Workflow History
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    Complete Your Task
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                    <div className="space-y-3">
+                      <Textarea
+                        placeholder="Add completion notes (optional)"
+                        value={taskCompletionNotes}
+                        onChange={(e) => setTaskCompletionNotes(e.target.value)}
+                        rows={2}
+                        className="text-sm"
+                      />
+                      <Button 
+                        onClick={handleCompleteTask}
+                        disabled={isLoading}
+                        size="sm"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Mark My Task Complete
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="communications" className="mt-6">
+            {/* Communications - Comments & Files merged into 2-column layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Comments & Updates */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <MessageSquare className="h-5 w-5 text-blue-600" />
+                    Comments & Updates
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4">
+                  {/* Display existing comments with scrollable container */}
+                  <div>
+                    <h4 className="font-medium text-sm mb-4">Recent Comments</h4>
+                    <div className="max-h-96 overflow-y-auto">
+                      {goal.comments && goal.comments.length > 0 ? (
+                        <div className="space-y-4 pr-2">
+                          {goal.comments.map((comment: any, index: number) => (
+                            <div key={comment.id}>
+                              <div className="border-l-4 border-blue-200 pl-4 py-4 bg-gray-50 rounded-r-lg">
+                                <div className="flex items-start gap-3">
+                                  {/* User Avatar */}
+                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-xs font-medium text-blue-700">
+                                      {(comment.user?.full_name || 'Unknown User').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-medium text-sm text-gray-900">
+                                        {comment.user?.full_name || 'Unknown User'}
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(comment.created_at).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Separator line between comments */}
+                              {index < (goal.comments?.length || 0) - 1 && (
+                                <hr className="border-gray-200 mt-4" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <MessageSquare className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                          <p className="text-sm">No comments yet</p>
+                          <p className="text-xs text-gray-400 mt-1">Be the first to share an update</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add Comment Form */}
+                  {canComment && (
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <Textarea
+                            placeholder="Share progress updates, challenges, or achievements..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            rows={4}
+                            className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                            {newComment.length}/500
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button 
+                            onClick={handleAddComment}
+                            disabled={isLoading || !newComment.trim()}
+                            size="sm"
+                            className="px-4"
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            {isLoading ? 'Adding...' : 'Add Comment'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Right Column: Files & Attachments */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                    Files & Attachments
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4">
+                  {canComment && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-3">Upload New Files</h4>
+                      <FileUpload
+                        onFilesSelected={setUploadFiles}
+                        existingFiles={uploadFiles}
+                        disabled={uploadLoading}
+                        showPreview={true}
+                      />
+                      {uploadFiles.length > 0 && (
+                        <Button onClick={handleFileUpload} disabled={uploadLoading} size="sm" className="mt-3">
+                          {uploadLoading ? 'Uploading...' : 'Upload Files'}
+                        </Button>
+                      )}
+                      {uploadError && (
+                        <div className="text-red-500 text-sm mt-2">{uploadError}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {loadingAttachments ? (
+                    <div className="text-center py-6">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="text-sm text-gray-500 mt-2">Loading attachments...</p>
+                    </div>
+                  ) : attachments.length > 0 ? (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Existing Files</h4>
+                      {attachments.map((attachment) => (
+                        <div key={attachment.id} className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-gray-400" />
+                            <div>
+                              <p className="font-medium text-sm">{attachment.filename}</p>
+                              <p className="text-xs text-gray-500">
+                                {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : 'Unknown size'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(getGoalAttachmentUrl(attachment.file_url), '_blank')}
+                            >
+                              View
+                            </Button>
+                            {(canEdit || attachment.uploaded_by === userProfile.id) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteAttachment(attachment.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">
+                      <FileText className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm">No attachments yet</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          <TabsContent value="comments" className="mt-6">
-            {/* Comments & Progress Updates */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <MessageSquare className="h-5 w-5 text-blue-600" />
-                  Comments & Updates
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4">
-                {/* Display existing comments with scrollable container */}
-                <div>
-                  <h4 className="font-medium text-sm mb-4">Recent Comments</h4>
-                  <div className="max-h-96 overflow-y-auto">
-                    {goal.comments && goal.comments.length > 0 ? (
-                      <div className="space-y-4 pr-2">
-                        {goal.comments.map((comment: any, index: number) => (
-                          <div key={comment.id}>
-                            <div className="border-l-4 border-blue-200 pl-4 py-4 bg-gray-50 rounded-r-lg">
-                              <div className="flex items-start gap-3">
-                                {/* User Avatar */}
-                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-xs font-medium text-blue-700">
-                                    {(comment.user?.full_name || 'Unknown User').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                                  </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="font-medium text-sm text-gray-900">
-                                      {comment.user?.full_name || 'Unknown User'}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(comment.created_at).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
-                                </div>
-                              </div>
-                            </div>
-                            {/* Separator line between comments */}
-                            {index < (goal.comments?.length || 0) - 1 && (
-                              <hr className="border-gray-200 mt-4" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <MessageSquare className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                        <p className="text-sm">No comments yet</p>
-                        <p className="text-xs text-gray-400 mt-1">Be the first to share an update</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Add Comment Form */}
-                {canComment && (
-                  <div className="border-t pt-4">
-                    <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <Textarea
-                          placeholder="Share progress updates, challenges, or achievements..."
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          rows={4}
-                          className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                          {newComment.length}/500
-                        </div>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button 
-                          onClick={handleAddComment}
-                          disabled={isLoading || !newComment.trim()}
-                          size="sm"
-                          className="px-4"
-                        >
-                          <MessageSquare className="h-4 w-4 mr-2" />
-                          {isLoading ? 'Adding...' : 'Add Comment'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="files" className="mt-6">
-            {/* Files & Attachments */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <FileText className="h-5 w-5 text-purple-600" />
-                  Files & Attachments
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4">
-                {canComment && (
-                  <div>
-                    <h4 className="font-medium text-sm mb-3">Upload New Files</h4>
-                    <FileUpload
-                      onFilesSelected={setUploadFiles}
-                      existingFiles={uploadFiles}
-                      disabled={uploadLoading}
-                      showPreview={true}
-                    />
-                    {uploadFiles.length > 0 && (
-                      <Button onClick={handleFileUpload} disabled={uploadLoading} size="sm" className="mt-3">
-                        {uploadLoading ? 'Uploading...' : 'Upload Files'}
-                      </Button>
-                    )}
-                    {uploadError && (
-                      <div className="text-red-500 text-sm mt-2">{uploadError}</div>
-                    )}
-                  </div>
-                )}
-
-                {loadingAttachments ? (
-                  <div className="text-center py-6">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-sm text-gray-500 mt-2">Loading attachments...</p>
-                  </div>
-                ) : attachments.length > 0 ? (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">Existing Files</h4>
-                    {attachments.map((attachment) => (
-                      <div key={attachment.id} className="flex items-center justify-between p-2 border rounded">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-gray-400" />
-                          <div>
-                            <p className="font-medium text-sm">{attachment.filename}</p>
-                            <p className="text-xs text-gray-500">
-                              {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : 'Unknown size'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => window.open(getGoalAttachmentUrl(attachment.file_url), '_blank')}
-                          >
-                            View
-                          </Button>
-                          {(canEdit || attachment.uploaded_by === userProfile.id) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteAttachment(attachment.id)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-gray-500">
-                    <FileText className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                    <p className="text-sm">No attachments yet</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
 

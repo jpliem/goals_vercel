@@ -371,6 +371,293 @@ export async function updateUserDepartmentTeam(userId: string, department: strin
   }
 }
 
+// Rename a department
+export async function renameDepartment(oldName: string, newName: string) {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: "Unauthorized: Admin access required" }
+    }
+
+    if (!oldName.trim() || !newName.trim()) {
+      return { error: "Old and new department names are required" }
+    }
+
+    if (oldName.trim() === newName.trim()) {
+      return { error: "New department name must be different from the current name" }
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, message: `Department '${oldName}' renamed to '${newName}' successfully (mock mode)` }
+    }
+
+    // Check if new department name already exists
+    const { data: existing } = await supabaseAdmin
+      .from("department_teams")
+      .select("department")
+      .eq("department", newName.trim())
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      return { error: "A department with this name already exists" }
+    }
+
+    // Begin transaction-like operations
+    // 1. Update department_teams table
+    const { error: teamsError } = await supabaseAdmin
+      .from("department_teams")
+      .update({ department: newName.trim() })
+      .eq("department", oldName.trim())
+
+    if (teamsError) {
+      console.error("Update department teams error:", teamsError)
+      return { error: "Failed to update department teams" }
+    }
+
+    // 2. Update users table
+    const { error: usersError } = await supabaseAdmin
+      .from("users")
+      .update({ department: newName.trim() })
+      .eq("department", oldName.trim())
+
+    if (usersError) {
+      console.error("Update users department error:", usersError)
+      return { error: "Failed to update user departments" }
+    }
+
+    // 3. Update goals table
+    const { error: goalsError } = await supabaseAdmin
+      .from("goals")
+      .update({ department: newName.trim() })
+      .eq("department", oldName.trim())
+
+    if (goalsError) {
+      console.error("Update goals department error:", goalsError)
+      return { error: "Failed to update goal departments" }
+    }
+
+    // 4. Update goal_tasks table
+    const { error: tasksError } = await supabaseAdmin
+      .from("goal_tasks")
+      .update({ department: newName.trim() })
+      .eq("department", oldName.trim())
+
+    if (tasksError) {
+      console.error("Update tasks department error:", tasksError)
+      return { error: "Failed to update task departments" }
+    }
+
+    // 5. Update department_permissions table
+    const { error: permissionsError } = await supabaseAdmin
+      .from("department_permissions")
+      .update({ department: newName.trim() })
+      .eq("department", oldName.trim())
+
+    if (permissionsError) {
+      console.error("Update department permissions error:", permissionsError)
+      return { error: "Failed to update department permissions" }
+    }
+
+    revalidatePath("/admin/system-config")
+    return { success: true, message: `Department '${oldName}' renamed to '${newName}' successfully` }
+  } catch (error) {
+    console.error("Rename department error:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
+// Rename a team within a department
+export async function renameTeam(department: string, oldTeamName: string, newTeamName: string) {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: "Unauthorized: Admin access required" }
+    }
+
+    if (!department.trim() || !oldTeamName.trim() || !newTeamName.trim()) {
+      return { error: "Department, old team name, and new team name are required" }
+    }
+
+    if (oldTeamName.trim() === newTeamName.trim()) {
+      return { error: "New team name must be different from the current name" }
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, message: `Team '${oldTeamName}' renamed to '${newTeamName}' successfully (mock mode)` }
+    }
+
+    // Check if new team name already exists in this department
+    const { data: existing } = await supabaseAdmin
+      .from("department_teams")
+      .select("id")
+      .eq("department", department.trim())
+      .eq("team", newTeamName.trim())
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      return { error: "A team with this name already exists in this department" }
+    }
+
+    // Begin transaction-like operations
+    // 1. Update department_teams table
+    const { error: teamsError } = await supabaseAdmin
+      .from("department_teams")
+      .update({ team: newTeamName.trim() })
+      .eq("department", department.trim())
+      .eq("team", oldTeamName.trim())
+
+    if (teamsError) {
+      console.error("Update team name error:", teamsError)
+      return { error: "Failed to update team name" }
+    }
+
+    // 2. Update users table
+    const { error: usersError } = await supabaseAdmin
+      .from("users")
+      .update({ team: newTeamName.trim() })
+      .eq("department", department.trim())
+      .eq("team", oldTeamName.trim())
+
+    if (usersError) {
+      console.error("Update users team error:", usersError)
+      return { error: "Failed to update user teams" }
+    }
+
+    revalidatePath("/admin/system-config")
+    return { success: true, message: `Team '${oldTeamName}' renamed to '${newTeamName}' successfully` }
+  } catch (error) {
+    console.error("Rename team error:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
+// Update department description
+export async function updateDepartmentDescription(department: string, description: string) {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: "Unauthorized: Admin access required" }
+    }
+
+    if (!department.trim()) {
+      return { error: "Department name is required" }
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, message: `Department description updated successfully (mock mode)` }
+    }
+
+    const { error } = await supabaseAdmin
+      .from("department_teams")
+      .update({ description: description.trim() || null })
+      .eq("department", department.trim())
+
+    if (error) {
+      console.error("Update department description error:", error)
+      return { error: "Failed to update department description" }
+    }
+
+    revalidatePath("/admin/system-config")
+    return { success: true, message: "Department description updated successfully" }
+  } catch (error) {
+    console.error("Update department description error:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
+// Bulk delete departments (only those with no users/goals)
+export async function bulkDeleteDepartments(departmentNames: string[]) {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: "Unauthorized: Admin access required" }
+    }
+
+    if (!departmentNames || departmentNames.length === 0) {
+      return { error: "No departments selected for deletion" }
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, message: `${departmentNames.length} departments deleted successfully (mock mode)` }
+    }
+
+    const results = []
+    for (const dept of departmentNames) {
+      const result = await deleteDepartment(dept)
+      results.push({ department: dept, ...result })
+    }
+
+    const successful = results.filter(r => r.success).length
+    const failed = results.filter(r => r.error).length
+
+    if (failed === 0) {
+      revalidatePath("/admin/system-config")
+      return { success: true, message: `All ${successful} departments deleted successfully` }
+    } else if (successful === 0) {
+      return { error: `Failed to delete all departments: ${results.find(r => r.error)?.error}` }
+    } else {
+      revalidatePath("/admin/system-config")
+      return { 
+        success: true, 
+        message: `${successful} departments deleted successfully, ${failed} failed`,
+        warnings: results.filter(r => r.error).map(r => `${r.department}: ${r.error}`)
+      }
+    }
+  } catch (error) {
+    console.error("Bulk delete departments error:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
+// Bulk delete teams (only those with no users)
+export async function bulkDeleteTeams(teams: { department: string; team: string }[]) {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: "Unauthorized: Admin access required" }
+    }
+
+    if (!teams || teams.length === 0) {
+      return { error: "No teams selected for deletion" }
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return { success: true, message: `${teams.length} teams deleted successfully (mock mode)` }
+    }
+
+    const results = []
+    for (const { department, team } of teams) {
+      const result = await deleteTeam(department, team)
+      results.push({ department, team, ...result })
+    }
+
+    const successful = results.filter(r => r.success).length
+    const failed = results.filter(r => r.error).length
+
+    if (failed === 0) {
+      revalidatePath("/admin/system-config")
+      return { success: true, message: `All ${successful} teams deleted successfully` }
+    } else if (successful === 0) {
+      return { error: `Failed to delete all teams: ${results.find(r => r.error)?.error}` }
+    } else {
+      revalidatePath("/admin/system-config")
+      return { 
+        success: true, 
+        message: `${successful} teams deleted successfully, ${failed} failed`,
+        warnings: results.filter(r => r.error).map(r => `${r.department}/${r.team}: ${r.error}`)
+      }
+    }
+  } catch (error) {
+    console.error("Bulk delete teams error:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
 // Get department usage statistics
 export async function getDepartmentUsageStats() {
   try {

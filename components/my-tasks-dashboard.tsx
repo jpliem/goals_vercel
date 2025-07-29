@@ -26,11 +26,13 @@ import {
   Pause,
   MoreHorizontal,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Edit
 } from "lucide-react"
 import { getMyTasks, completeTask, startTask, updateTask } from "@/actions/goal-tasks"
 import { getGoalById, type UserRecord } from "@/lib/goal-database"
 import { GoalDetailModal } from "@/components/modals/goal-detail-modal"
+import { TaskEditModal } from "@/components/modals/task-edit-modal"
 import Link from "next/link"
 
 interface TaskData {
@@ -84,6 +86,8 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedGoal, setSelectedGoal] = useState<any | null>(null)
   const [goalModalOpen, setGoalModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [taskToEdit, setTaskToEdit] = useState<any | null>(null)
 
   // Load tasks
   const loadTasks = async () => {
@@ -224,6 +228,39 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
     } catch (error) {
       toast.error("Failed to load goal details")
     }
+  }
+
+  const handleEditTask = (task: TaskData) => {
+    // Convert TaskData to the format expected by TaskEditModal
+    const taskForEdit = {
+      id: task.id,
+      goal_id: task.goal_id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: task.status,
+      assigned_to: userId, // Current user is assigned to their own tasks
+      assigned_user: task.assigned_user,
+      assigned_by: null,
+      assigned_by_user: task.assigned_by_user,
+      department: task.department,
+      start_date: null,
+      due_date: task.due_date,
+      estimated_hours: task.estimated_hours,
+      actual_hours: null,
+      completion_notes: task.completion_notes,
+      completed_at: task.completed_at,
+      completed_by: task.completed_by,
+      pdca_phase: null,
+      created_at: task.created_at,
+      updated_at: task.created_at
+    }
+    setTaskToEdit(taskForEdit)
+    setEditModalOpen(true)
+  }
+
+  const handleTaskUpdated = () => {
+    loadTasks()
   }
 
   const getPriorityColor = (priority: string) => {
@@ -519,6 +556,16 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
                             </div>
 
                             <div className="flex items-center gap-2 ml-4">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditTask(task)}
+                                disabled={actionLoading === task.id}
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </Button>
+                              
                               {task.status === 'pending' && (
                                 <Button
                                   size="sm"
@@ -668,6 +715,16 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
                             </div>
 
                             <div className="flex items-center gap-2 ml-4">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditTask(task)}
+                                disabled={actionLoading === task.id}
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </Button>
+                              
                               {task.status === 'pending' && (
                                 <Button
                                   size="sm"
@@ -898,6 +955,18 @@ export function MyTasksDashboard({ userId, userProfile }: MyTasksDashboardProps)
           setSelectedGoal(null)
         }}
         onRefresh={loadTasks}
+      />
+
+      {/* Task Edit Modal */}
+      <TaskEditModal
+        task={taskToEdit}
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false)
+          setTaskToEdit(null)
+        }}
+        onTaskUpdated={handleTaskUpdated}
+        availableUsers={[]} // Note: We'll need to add user list here if reassignment is needed
       />
     </div>
   )

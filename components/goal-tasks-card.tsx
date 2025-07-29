@@ -17,17 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import {
   CheckSquare,
   Plus,
-  MoreHorizontal,
   Calendar,
   Clock,
   User,
@@ -40,6 +33,8 @@ import {
 } from "lucide-react"
 import { createTask, getTasksForGoal, updateTask, deleteTask, getTaskStats } from "@/actions/goal-tasks"
 import type { UserRecord } from "@/lib/goal-database"
+import { TaskEditModal } from "@/components/modals/task-edit-modal"
+import { UnassignedTasksFilter } from "@/components/unassigned-tasks-filter"
 
 interface GoalTask {
   id: string
@@ -52,6 +47,7 @@ interface GoalTask {
   assigned_to: string | null
   assigned_by: string | null
   department: string | null
+  start_date: string | null
   due_date: string | null
   estimated_hours: number
   actual_hours: number
@@ -92,8 +88,11 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
   const [stats, setStats] = useState<TaskStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<GoalTask | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [filteredTasks, setFilteredTasks] = useState<GoalTask[]>([])
+  const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
 
   // Create task form state
   const [newTask, setNewTask] = useState({
@@ -101,6 +100,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
     description: "",
     priority: 'Medium' as const,
     assigned_to: "unassigned",
+    start_date: "",
     due_date: "",
     estimated_hours: "",
     pdca_phase: currentGoalStatus as 'Plan' | 'Do' | 'Check' | 'Act'
@@ -116,7 +116,9 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
       ])
 
       if (tasksResult.success && tasksResult.data) {
-        setTasks(tasksResult.data as GoalTask[])
+        const taskData = tasksResult.data as GoalTask[]
+        setTasks(taskData)
+        setFilteredTasks(taskData)
       }
 
       if (statsResult.success && statsResult.data) {
@@ -147,6 +149,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
       formData.append("description", newTask.description)
       formData.append("priority", newTask.priority)
       formData.append("assigned_to", newTask.assigned_to === "unassigned" ? "" : newTask.assigned_to)
+      formData.append("start_date", newTask.start_date)
       formData.append("due_date", newTask.due_date)
       formData.append("estimated_hours", newTask.estimated_hours || "0")
       formData.append("pdca_phase", newTask.pdca_phase)
@@ -161,6 +164,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
           description: "",
           priority: 'Medium',
           assigned_to: "unassigned",
+          start_date: "",
           due_date: "",
           estimated_hours: "",
           pdca_phase: currentGoalStatus as 'Plan' | 'Do' | 'Check' | 'Act'
@@ -192,6 +196,15 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const handleEditTask = (task: GoalTask) => {
+    setSelectedTask(task)
+    setShowEditModal(true)
+  }
+
+  const handleTaskUpdated = () => {
+    loadTasks()
   }
 
   const handleDeleteTask = async (taskId: string) => {
@@ -321,17 +334,30 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
           {/* Tasks List */}
           <div className="space-y-3">
             <h4 className="font-medium text-gray-900">Task List</h4>
-            {tasks.length === 0 ? (
+            
+            {/* Unassigned Tasks Filter */}
+            <UnassignedTasksFilter
+              tasks={tasks}
+              onFilterChange={setFilteredTasks}
+              showUnassignedOnly={showUnassignedOnly}
+              onToggleUnassigned={setShowUnassignedOnly}
+            />
+            
+            {filteredTasks.length === 0 ? (
               <div className="text-center py-8 text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
                 <Target className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                <div className="text-sm">No tasks created yet</div>
-                <div className="text-xs mt-1">Break down this goal into specific tasks</div>
+                <div className="text-sm">
+                  {showUnassignedOnly ? "No unassigned tasks" : "No tasks created yet"}
+                </div>
+                <div className="text-xs mt-1">
+                  {showUnassignedOnly ? "All tasks have been assigned" : "Break down this goal into specific tasks"}
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
                 {/* Group tasks by PDCA phase */}
                 {['Plan', 'Do', 'Check', 'Act'].map(phase => {
-                  const phaseTasks = tasks.filter(task => task.pdca_phase === phase)
+                  const phaseTasks = filteredTasks.filter(task => task.pdca_phase === phase)
                   if (phaseTasks.length === 0) return null
                   
                   return (
@@ -383,10 +409,16 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                                       <span>{task.assigned_user.full_name}</span>
                                     </div>
                                   )}
+                                  {task.start_date && (
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      <span>Start: {formatDate(task.start_date)}</span>
+                                    </div>
+                                  )}
                                   {task.due_date && (
                                     <div className="flex items-center gap-1">
                                       <Calendar className="w-3 h-3" />
-                                      <span>{formatDate(task.due_date)}</span>
+                                      <span>Due: {formatDate(task.due_date)}</span>
                                     </div>
                                   )}
                                   {task.estimated_hours > 0 && (
@@ -419,41 +451,53 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                             </div>
 
                             {canManageTasks && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {task.status === 'pending' && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
-                                      disabled={actionLoading === task.id}
-                                    >
-                                      <Play className="w-4 h-4 mr-2" />
-                                      Start Task
-                                    </DropdownMenuItem>
-                                  )}
-                                  {task.status === 'in_progress' && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
-                                      disabled={actionLoading === task.id}
-                                    >
-                                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                                      Complete Task
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem
-                                    onClick={() => handleDeleteTask(task.id)}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={() => handleEditTask(task)}
+                                  disabled={actionLoading === task.id}
+                                  className="text-xs"
+                                >
+                                  <Edit className="w-3 h-3 mr-1" />
+                                  Edit
+                                </Button>
+                                
+                                {task.status === 'pending' && (
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
                                     disabled={actionLoading === task.id}
-                                    className="text-red-600"
+                                    className="text-xs bg-blue-600 hover:bg-blue-700"
                                   >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete Task
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                    <Play className="w-3 h-3 mr-1" />
+                                    Start
+                                  </Button>
+                                )}
+                                
+                                {task.status === 'in_progress' && (
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                                    disabled={actionLoading === task.id}
+                                    className="text-xs bg-green-600 hover:bg-green-700"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    Complete
+                                  </Button>
+                                )}
+                                
+                                <Button 
+                                  size="sm" 
+                                  variant="secondary" 
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  disabled={actionLoading === task.id}
+                                  className="text-xs text-gray-600"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  No Longer Needed
+                                </Button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -540,6 +584,17 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
               </div>
 
               <div>
+                <Label htmlFor="task-start-date">Start Date (Optional)</Label>
+                <Input
+                  id="task-start-date"
+                  type="date"
+                  value={newTask.start_date}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, start_date: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
                 <Label htmlFor="task-due-date">Due Date (Optional)</Label>
                 <Input
                   id="task-due-date"
@@ -601,6 +656,18 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Task Edit Modal */}
+      <TaskEditModal
+        task={selectedTask}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setSelectedTask(null)
+        }}
+        onTaskUpdated={handleTaskUpdated}
+        availableUsers={users}
+      />
     </>
   )
 }

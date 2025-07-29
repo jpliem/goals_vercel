@@ -15,8 +15,9 @@ interface DebugUser {
   team?: string
 }
 
-// Test users from seed data for debug switching
+// Test users from debug seed data for debug switching
 const DEBUG_USERS: DebugUser[] = [
+  // System Admin
   {
     id: '11111111-1111-1111-1111-111111111111',
     email: 'admin@company.com',
@@ -25,13 +26,15 @@ const DEBUG_USERS: DebugUser[] = [
     department: 'IT',
     team: 'Infrastructure'
   },
+  
+  // Department Heads (for testing support requests)
   {
     id: '22222222-2222-2222-2222-222222222222',
     email: 'john.smith@company.com',
     full_name: 'John Smith',
     role: 'Head',
     department: 'IT',
-    team: 'Development'
+    team: 'GSPE'
   },
   {
     id: '33333333-3333-3333-3333-333333333333',
@@ -42,20 +45,86 @@ const DEBUG_USERS: DebugUser[] = [
     team: 'Recruitment'
   },
   {
+    id: '66666666-6666-6666-6666-666666666666',
+    email: 'david.brown@company.com',
+    full_name: 'David Brown',
+    role: 'Head',
+    department: 'Sales',
+    team: 'ABB'
+  },
+  {
+    id: '88888888-8888-8888-8888-888888888888',
+    email: 'robert.wilson@company.com',
+    full_name: 'Robert Wilson',
+    role: 'Head',
+    department: 'Finance',
+    team: 'Finance'
+  },
+  {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    email: 'james.taylor@company.com',
+    full_name: 'James Taylor',
+    role: 'Head',
+    department: 'Engineer',
+    team: 'Mechanical Engineering'
+  },
+  {
+    id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    email: 'kevin.martinez@company.com',
+    full_name: 'Kevin Martinez',
+    role: 'Head',
+    department: 'Operation',
+    team: 'Production'
+  },
+
+  // Employees (for testing different perspectives)
+  {
     id: '44444444-4444-4444-4444-444444444444',
     email: 'mike.chen@company.com',
     full_name: 'Mike Chen',
     role: 'Employee',
     department: 'IT',
-    team: 'Development'
+    team: 'IoT'
   },
   {
     id: '55555555-5555-5555-5555-555555555555',
-    email: 'lisa.davis@company.com',
-    full_name: 'Lisa Davis',
+    email: 'lisa.wang@company.com',
+    full_name: 'Lisa Wang',
+    role: 'Employee',
+    department: 'HR',
+    team: 'Training & Development'
+  },
+  {
+    id: '77777777-7777-7777-7777-777777777777',
+    email: 'emma.davis@company.com',
+    full_name: 'Emma Davis',
     role: 'Employee',
     department: 'Sales',
-    team: 'Inside Sales'
+    team: 'Siemens'
+  },
+  {
+    id: '99999999-9999-9999-9999-999999999999',
+    email: 'anna.garcia@company.com',
+    full_name: 'Anna Garcia',
+    role: 'Employee',
+    department: 'Finance',
+    team: 'Tax'
+  },
+  {
+    id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    email: 'maria.lopez@company.com',
+    full_name: 'Maria Lopez',
+    role: 'Employee',
+    department: 'Engineer',
+    team: 'Electrical Engineering'
+  },
+  {
+    id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    email: 'sophie.anderson@company.com',
+    full_name: 'Sophie Anderson',
+    role: 'Employee',
+    department: 'Operation',
+    team: 'QC & QA'
   }
 ]
 

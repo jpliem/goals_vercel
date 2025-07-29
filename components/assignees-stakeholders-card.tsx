@@ -117,10 +117,10 @@ export function AssigneesStakeholdersCard({ goal, assignees }: AssigneesStakehol
                     </div>
                   </div>
                   <Badge 
-                    variant={support.status === 'Approved' ? 'default' : 'outline'}
+                    variant={support.status === 'Accepted' ? 'default' : 'outline'}
                     className="text-xs"
                   >
-                    {support.status}
+                    {support.status || 'Accepted'}
                   </Badge>
                 </div>
               ))}

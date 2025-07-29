@@ -69,6 +69,11 @@ const GOAL_TYPES = [
 
 export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onSuccess }: CreateGoalFormProps) {
   // Set smart defaults
+  const getDefaultStartDate = () => {
+    const date = new Date()
+    return date.toISOString().split('T')[0] // Today
+  }
+
   const getDefaultTargetDate = () => {
     const date = new Date()
     date.setMonth(date.getMonth() + 3) // 3 months from now
@@ -82,6 +87,7 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
     priority: "Medium",
     department: userProfile.department || "",
     teams: [] as string[], // Changed from single team to array
+    start_date: getDefaultStartDate(),
     target_date: getDefaultTargetDate(),
     target_metrics: "",
     success_criteria: "",
@@ -93,6 +99,7 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
       priority: 'Low' | 'Medium' | 'High' | 'Critical';
       assigned_to: string;
       department: string;
+      start_date: string;
       due_date: string;
       estimated_hours: number;
       pdca_phase: 'Plan' | 'Do' | 'Check' | 'Act';
@@ -112,6 +119,7 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
         priority: 'Medium' as const,
         assigned_to: "unassigned",
         department: prev.department,
+        start_date: "",
         due_date: "",
         estimated_hours: 0,
         pdca_phase: 'Plan' as const
@@ -172,6 +180,17 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
       return
     }
 
+    // Date validation: start_date <= target_date
+    if (formData.start_date && formData.target_date) {
+      const start = new Date(formData.start_date)
+      const target = new Date(formData.target_date)
+      if (start > target) {
+        setError("Start date cannot be later than target date")
+        setIsLoading(false)
+        return
+      }
+    }
+
     try {
       const formDataObj = new FormData()
       formDataObj.append("goal_type", formData.goal_type)
@@ -181,6 +200,9 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
       formDataObj.append("department", formData.department)
       if (formData.teams.length > 0) {
         formDataObj.append("teams", JSON.stringify(formData.teams))
+      }
+      if (formData.start_date) {
+        formDataObj.append("start_date", formData.start_date)
       }
       if (formData.target_date) {
         formDataObj.append("target_date", formData.target_date)
@@ -211,8 +233,13 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
         return
       }
 
-      // Form submission successful - add success feedback
-      alert("Goal created successfully! Redirecting to dashboard...")
+      // Form submission successful - open goal in new tab and provide feedback
+      if (result?.data?.id) {
+        alert("Goal created successfully! Opening in new tab...")
+        window.open(`/dashboard/goals/${result.data.id}`, '_blank')
+      } else {
+        alert("Goal created successfully!")
+      }
       onSuccess?.();
     } catch (err) {
       setError("An unexpected error occurred")
@@ -392,8 +419,8 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                 </div>
               </div>
 
-              {/* Priority and Target Date */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Priority, Start Date, and Target Date */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="priority" className="text-sm font-medium flex items-center gap-2">
                     ⚡ Priority
@@ -409,6 +436,18 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                       <SelectItem value="Critical">Critical</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="start_date" className="text-sm font-medium flex items-center gap-2">
+                    🚀 Start Date
+                  </Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => handleInputChange("start_date", e.target.value)}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -729,6 +768,19 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                                   ))}
                               </SelectContent>
                             </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-xs text-gray-600 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Start Date
+                            </Label>
+                            <Input
+                              type="date"
+                              value={task.start_date}
+                              onChange={(e) => updateTask(index, 'start_date', e.target.value)}
+                              className="h-8"
+                            />
                           </div>
 
                           <div>
