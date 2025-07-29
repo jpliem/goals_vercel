@@ -71,6 +71,42 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
           return 'Status updated'
         }
         
+        // Create more descriptive status change messages for PDCA phases
+        const getPhaseTransitionMessage = (from: string, to: string) => {
+          const transitions: Record<string, Record<string, string>> = {
+            'Plan': {
+              'Do': 'Started execution phase',
+              'On Hold': 'Paused during planning'
+            },
+            'Do': {
+              'Check': 'Moved to review phase',
+              'On Hold': 'Paused during execution'
+            },
+            'Check': {
+              'Act': 'Ready to implement improvements',
+              'Do': 'Returned to execution for adjustments',
+              'On Hold': 'Paused during review'
+            },
+            'Act': {
+              'Completed': 'Goal completed successfully',
+              'Plan': 'Started new improvement cycle',
+              'On Hold': 'Paused during implementation'
+            },
+            'On Hold': {
+              'Plan': 'Resumed in planning phase',
+              'Do': 'Resumed execution',
+              'Check': 'Resumed review phase',
+              'Act': 'Resumed implementation phase'
+            }
+          }
+          
+          return transitions[from]?.[to] || `Status changed from ${from} to ${to}`
+        }
+        
+        if (fromStatus && toStatus) {
+          return getPhaseTransitionMessage(fromStatus, toStatus)
+        }
+        
         const fromText = fromStatus ? ` from ${fromStatus}` : ''
         return `Status changed${fromText} to ${toStatus}`
       case 'assigned':
@@ -125,9 +161,16 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
     )
   }
 
+  // Sort workflow history by date (latest first)
+  const sortedHistory = [...workflowHistory].sort((a, b) => {
+    const dateA = new Date(a.created_at || a.timestamp || 0)
+    const dateB = new Date(b.created_at || b.timestamp || 0)
+    return dateB.getTime() - dateA.getTime() // Latest first
+  })
+
   return (
     <div className="space-y-4">
-      {workflowHistory.map((item, index) => (
+      {sortedHistory.map((item, index) => (
             <div key={item.id || `history-${index}`} className="flex items-start space-x-3 pb-3 border-b border-gray-100 last:border-b-0">
               <div className="flex-1">
                 <div className="flex items-center space-x-2">

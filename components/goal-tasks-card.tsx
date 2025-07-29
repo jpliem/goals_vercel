@@ -63,6 +63,12 @@ interface GoalTask {
     email: string
     department: string | null
   }
+  assigned_by_user?: {
+    id: string
+    full_name: string
+    email: string
+    department: string | null
+  }
 }
 
 interface TaskStats {
@@ -81,9 +87,10 @@ interface GoalTasksCardProps {
   isAssignee: boolean
   currentGoalStatus: string
   goalDepartment: string
+  supportDepartments?: string[] // List of support department names
 }
 
-export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee, currentGoalStatus, goalDepartment }: GoalTasksCardProps) {
+export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee, currentGoalStatus, goalDepartment, supportDepartments = [] }: GoalTasksCardProps) {
   const [tasks, setTasks] = useState<GoalTask[]>([])
   const [stats, setStats] = useState<TaskStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -141,6 +148,9 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
       return
     }
 
+    // Prevent duplicate calls if already creating
+    if (actionLoading === "create") return
+
     setActionLoading("create")
     try {
       const formData = new FormData()
@@ -169,7 +179,10 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
           estimated_hours: "",
           pdca_phase: currentGoalStatus as 'Plan' | 'Do' | 'Check' | 'Act'
         })
-        loadTasks()
+        // Only reload tasks if not already loading
+        if (!loading) {
+          loadTasks()
+        }
       } else {
         toast.error("Failed to create task", { description: result.error })
       }
@@ -181,13 +194,19 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
   }
 
   const handleUpdateTaskStatus = async (taskId: string, status: string) => {
+    // Prevent duplicate calls if already updating this task
+    if (actionLoading === taskId) return
+
     setActionLoading(taskId)
     try {
       const result = await updateTask(taskId, { status: status as any })
       
       if (result.success) {
         toast.success(`Task ${status === 'completed' ? 'completed' : 'started'}`)
-        loadTasks()
+        // Only reload tasks if not already loading
+        if (!loading) {
+          loadTasks()
+        }
       } else {
         toast.error("Failed to update task", { description: result.error })
       }
@@ -204,11 +223,17 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
   }
 
   const handleTaskUpdated = () => {
-    loadTasks()
+    // Only reload if not already loading to prevent duplicate calls
+    if (!loading) {
+      loadTasks()
+    }
   }
 
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm("Are you sure you want to delete this task?")) return
+
+    // Prevent duplicate calls if already deleting this task
+    if (actionLoading === taskId) return
 
     setActionLoading(taskId)
     try {
@@ -216,7 +241,10 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
       
       if (result.success) {
         toast.success("Task deleted successfully")
-        loadTasks()
+        // Only reload tasks if not already loading
+        if (!loading) {
+          loadTasks()
+        }
       } else {
         toast.error("Failed to delete task", { description: result.error })
       }
@@ -263,11 +291,25 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
   const canManageTasks = isOwner || isAssignee || currentUser.role === 'Admin' ||
                         (currentUser.role === 'Head' && goalDepartment === currentUser.department)
 
+  // Filter users to only show those from goal department or support departments
+  const availableUsers = users.filter(user => {
+    // Always include users from the goal's department
+    if (user.department === goalDepartment) return true
+    
+    // Include users from support departments
+    if (user.department && supportDepartments.includes(user.department)) return true
+    
+    // Admins can see all users
+    if (currentUser.role === 'Admin') return true
+    
+    return false
+  })
+
   if (loading) {
     return (
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+          <CardTitle className="flex items-center gap-2 text-base font-medium">
             <CheckSquare className="h-5 w-5 text-purple-600" />
             Tasks & Progress
           </CardTitle>
@@ -287,7 +329,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
               <CheckSquare className="h-5 w-5 text-purple-600" />
               Tasks & Progress
             </CardTitle>
@@ -306,26 +348,40 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
         <CardContent className="space-y-4 p-4">
           {/* Task Statistics */}
           {stats && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">Overall Progress</span>
-                <span className="text-gray-600">
+                <span className="font-medium text-gray-800">Overall Progress</span>
+                <span className="text-gray-600 bg-gray-100 px-2 py-1 rounded-full text-xs font-medium">
                   {stats.completed_tasks} of {stats.total_tasks} tasks completed
                 </span>
               </div>
-              <Progress value={stats.completion_percentage} className="h-2" />
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-gray-50 p-2 rounded">
-                  <div className="text-lg font-bold text-gray-600">{stats.pending_tasks}</div>
-                  <div className="text-xs text-gray-500">Pending</div>
+              
+              {/* Enhanced Progress Bar */}
+              <div className="relative">
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${stats.completion_percentage}%` }}
+                  ></div>
                 </div>
-                <div className="bg-blue-50 p-2 rounded">
-                  <div className="text-lg font-bold text-blue-600">{stats.in_progress_tasks}</div>
-                  <div className="text-xs text-blue-500">In Progress</div>
+                <div className="text-xs text-gray-600 mt-1 text-center font-medium">
+                  {Math.round(stats.completion_percentage)}% Complete
                 </div>
-                <div className="bg-green-50 p-2 rounded">
-                  <div className="text-lg font-bold text-green-600">{stats.completed_tasks}</div>
-                  <div className="text-xs text-green-500">Completed</div>
+              </div>
+              
+              {/* Enhanced Statistics Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="text-base font-semibold text-gray-700">{stats.pending_tasks}</div>
+                  <div className="text-xs text-gray-600 font-medium">Pending</div>
+                </div>
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200 shadow-sm">
+                  <div className="text-base font-semibold text-blue-700">{stats.in_progress_tasks}</div>
+                  <div className="text-xs text-blue-600 font-medium">In Progress</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200 shadow-sm">
+                  <div className="text-base font-semibold text-green-700">{stats.completed_tasks}</div>
+                  <div className="text-xs text-green-600 font-medium">Completed</div>
                 </div>
               </div>
             </div>
@@ -363,7 +419,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                   return (
                     <div key={phase} className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <h5 className="font-semibold text-sm text-gray-800">{phase} Phase</h5>
+                        <h5 className="font-medium text-sm text-gray-800">{phase} Phase</h5>
                         <div className={`px-2 py-1 rounded text-xs font-medium ${
                           phase === 'Plan' ? 'bg-blue-100 text-blue-800' :
                           phase === 'Do' ? 'bg-purple-100 text-purple-800' :
@@ -376,22 +432,26 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                       {phaseTasks.map((task) => (
                         <div
                           key={task.id}
-                          className={`border rounded-lg p-3 ml-4 ${
+                          className={`border rounded-xl p-4 ml-4 shadow-sm hover:shadow-md transition-all duration-200 ${
                             isOverdue(task.due_date) && task.status !== 'completed' 
-                              ? 'border-red-200 bg-red-50' 
-                              : 'border-gray-200 bg-white'
+                              ? 'border-red-300 bg-gradient-to-br from-red-50 to-red-100' 
+                              : task.status === 'completed'
+                                ? 'border-green-300 bg-gradient-to-br from-green-50 to-green-100'
+                                : task.status === 'in_progress'
+                                  ? 'border-blue-300 bg-gradient-to-br from-blue-50 to-blue-100'
+                                  : 'border-gray-300 bg-gradient-to-br from-white to-gray-50'
                           }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-2">
                                 {getStatusIcon(task.status)}
-                                <span className="font-medium">{task.title}</span>
-                                <Badge className={getPriorityColor(task.priority)}>
+                                <span className="font-medium text-gray-900">{task.title}</span>
+                                <Badge className={`text-xs font-medium ${getPriorityColor(task.priority)}`}>
                                   {task.priority}
                                 </Badge>
                                 {isOverdue(task.due_date) && task.status !== 'completed' && (
-                                  <Badge variant="destructive" className="text-xs">
+                                  <Badge variant="destructive" className="text-xs font-medium">
                                     <AlertCircle className="w-3 h-3 mr-1" />
                                     Overdue
                                   </Badge>
@@ -407,6 +467,12 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                                     <div className="flex items-center gap-1">
                                       <User className="w-3 h-3" />
                                       <span>{task.assigned_user.full_name}</span>
+                                    </div>
+                                  )}
+                                  {task.assigned_by_user && (
+                                    <div className="flex items-center gap-1 text-gray-500">
+                                      <User className="w-3 h-3" />
+                                      <span className="text-xs">Created by: {task.assigned_by_user.full_name}</span>
                                     </div>
                                   )}
                                   {task.start_date && (
@@ -451,13 +517,13 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                             </div>
 
                             {canManageTasks && (
-                              <div className="flex items-center gap-1 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap ml-2">
                                 <Button 
                                   size="sm" 
                                   variant="outline" 
                                   onClick={() => handleEditTask(task)}
                                   disabled={actionLoading === task.id}
-                                  className="text-xs"
+                                  className="text-xs border-2 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
                                 >
                                   <Edit className="w-3 h-3 mr-1" />
                                   Edit
@@ -468,7 +534,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                                     size="sm" 
                                     onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
                                     disabled={actionLoading === task.id}
-                                    className="text-xs bg-blue-600 hover:bg-blue-700"
+                                    className="text-xs bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-sm transition-all duration-200"
                                   >
                                     <Play className="w-3 h-3 mr-1" />
                                     Start
@@ -480,7 +546,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                                     size="sm" 
                                     onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
                                     disabled={actionLoading === task.id}
-                                    className="text-xs bg-green-600 hover:bg-green-700"
+                                    className="text-xs bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-sm transition-all duration-200"
                                   >
                                     <CheckCircle2 className="w-3 h-3 mr-1" />
                                     Complete
@@ -492,7 +558,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                                   variant="secondary" 
                                   onClick={() => handleDeleteTask(task.id)}
                                   disabled={actionLoading === task.id}
-                                  className="text-xs text-gray-600"
+                                  className="text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 transition-all duration-200"
                                 >
                                   <Trash2 className="w-3 h-3 mr-1" />
                                   No Longer Needed
@@ -574,7 +640,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {users.map((user) => (
+                    {availableUsers.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.full_name} ({user.department || 'No Dept'})
                       </SelectItem>
@@ -666,7 +732,7 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
           setSelectedTask(null)
         }}
         onTaskUpdated={handleTaskUpdated}
-        availableUsers={users}
+        availableUsers={availableUsers}
       />
     </>
   )

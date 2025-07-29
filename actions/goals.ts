@@ -187,8 +187,7 @@ export async function createGoal(formData: FormData) {
             goal_id: data.id as string,
             support_type: "Department",
             support_name: requirement.department,
-            requested_by: user.id,
-            status: "Accepted"
+            requested_by: user.id
           })
 
           // Create support for each team within the department
@@ -198,8 +197,7 @@ export async function createGoal(formData: FormData) {
               support_type: "Team",
               support_name: team,
               support_department: requirement.department, // New field to link team to department
-              requested_by: user.id,
-              status: "Accepted"
+              requested_by: user.id
             })
           }
         }
@@ -502,10 +500,12 @@ export async function updateGoalStatus(goalId: string, status: string, currentAs
       user_id: user.id,
       user_name: user.full_name || user.email,
       action: "status_change" as const,
-      from_status: oldStatus,
-      to_status: status,
-      comment: `Status changed from ${oldStatus} to ${status}`,
-      previous_status: previousStatus
+      details: {
+        from_status: oldStatus,
+        to_status: status,
+        comment: `Status changed from ${oldStatus} to ${status}`,
+        previous_status: previousStatus
+      }
     }
 
     const { data, error } = await dbUpdateGoalStatus(goalId, status, currentAssigneeId, workflowEntry, previousStatus)
@@ -735,41 +735,7 @@ export async function deleteGoal(goalId: string) {
   }
 }
 
-export async function updateGoalSupportStatus(goalId: string, supportId: string, status: string, notes?: string) {
-  try {
-    const user = await requireAuth()
-
-    const { data, error } = await updateGoalSupport(supportId, { status, notes })
-
-    if (error) {
-      console.error("Update goal support error:", error)
-      return { error: "Failed to update support status" }
-    }
-
-    // Create notification for support status change
-    try {
-      const updatedGoal = await getGoalById(goalId)
-      if (updatedGoal.data) {
-        const workflowEntry = {
-          action: "support_status_change",
-          user_id: user.id,
-          timestamp: new Date().toISOString(),
-          support_status: status,
-          notes: notes
-        }
-        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
-      }
-    } catch (error) {
-      console.error("Error creating support status notifications:", error)
-    }
-
-    revalidatePath(`/dashboard/goals/${goalId}`)
-    return { success: true, data }
-  } catch (error) {
-    console.error("Update goal support error:", error)
-    return { error: "Authentication required" }
-  }
-}
+// Support status management removed - support departments are now automatically available for task assignment
 
 // Additional required functions
 export async function updateGoal(goalId: string, updates: any) {

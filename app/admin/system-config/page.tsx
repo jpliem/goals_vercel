@@ -2,6 +2,14 @@ import { redirect } from "next/navigation"
 import { getCurrentUserProfile } from "@/lib/auth"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
+import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
+import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
+import { GoalExportManager } from "@/components/admin/goal-export-manager"
+import { DepartmentExportManager } from "@/components/admin/department-export-manager"
+import { AssignmentExportManager } from "@/components/admin/assignment-export-manager"
+import { GoalImportManager } from "@/components/admin/goal-import-manager"
+import { DepartmentImportManager } from "@/components/admin/department-import-manager"
+import { UserImportManager } from "@/components/admin/user-import-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -176,6 +184,12 @@ export default async function SystemConfigPage() {
 
             {/* System Settings Tab */}
             <TabsContent value="system" className="space-y-6">
+              {/* Workflow Rules Configuration */}
+              <WorkflowRulesEditor />
+              
+              {/* Status Transitions Management */}
+              <StatusTransitionsEditor />
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -185,6 +199,12 @@ export default async function SystemConfigPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
+                    <Link href="/admin/workflow">
+                      <Button variant="outline" className="w-full justify-start">
+                        <FileText className="w-4 h-4 mr-2" />
+                        View Workflow Documentation
+                      </Button>
+                    </Link>
                     <Button variant="outline" className="w-full justify-start" disabled>
                       <Settings className="w-4 h-4 mr-2" />
                       General Configuration
@@ -206,119 +226,76 @@ export default async function SystemConfigPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-orange-600" />
-                      PDCA Workflow Settings
+                      <Database className="w-5 h-5 text-red-600" />
+                      System Maintenance
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Link href="/admin/workflow">
-                      <Button variant="outline" className="w-full justify-start">
-                        <FileText className="w-4 h-4 mr-2" />
-                        View Workflow Documentation
+                  <CardContent>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-red-800">
+                        <strong>Warning:</strong> These operations can affect system data. Use with caution and ensure you have proper backups.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button variant="outline" disabled>
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Reset Demo Data
+                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
                       </Button>
-                    </Link>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Settings className="w-4 h-4 mr-2" />
-                      Workflow Rules
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Activity className="w-4 h-4 mr-2" />
-                      Status Transitions
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
+                      <Button variant="outline" disabled>
+                        <Database className="w-4 h-4 mr-2" />
+                        Database Cleanup
+                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
+                      </Button>
+                      <Button variant="outline" disabled>
+                        <Activity className="w-4 h-4 mr-2" />
+                        System Health Check
+                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="w-5 h-5 text-red-600" />
-                    System Maintenance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm text-red-800">
-                      <strong>Warning:</strong> These operations can affect system data. Use with caution and ensure you have proper backups.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Button variant="outline" disabled>
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Reset Demo Data
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" disabled>
-                      <Database className="w-4 h-4 mr-2" />
-                      Database Cleanup
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" disabled>
-                      <Activity className="w-4 h-4 mr-2" />
-                      System Health Check
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
             </TabsContent>
 
             {/* Data Management Tab */}
             <TabsContent value="data" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Export Managers */}
+                <GoalExportManager />
+                <DepartmentExportManager />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Assignment Export Manager */}
+                <AssignmentExportManager />
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Download className="w-5 h-5 text-blue-600" />
-                      Export Data
+                      Additional Exports
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Button variant="outline" className="w-full justify-start" disabled>
                       <Download className="w-4 h-4 mr-2" />
-                      Export All Goals
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Department Structure
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export User Assignments
+                      Export Audit Logs
                       <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
                     </Button>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Upload className="w-5 h-5 text-green-600" />
-                      Import Data
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import Goals (CSV)
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import Department Structure
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import User Data (CSV)
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                  </CardContent>
-                </Card>
+                {/* Goal Import Manager */}
+                <GoalImportManager />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Department Import Manager */}
+                <DepartmentImportManager />
+
+                {/* User Import Manager */}
+                <UserImportManager />
               </div>
 
               <Card>

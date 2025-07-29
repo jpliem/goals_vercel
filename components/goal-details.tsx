@@ -40,7 +40,6 @@ import {
   uploadGoalCommentAttachment, 
   markGoalAssigneeTaskComplete,
   updateGoalDetails as updateGoalDetailsAction,
-  updateGoalSupportStatus
 } from "@/actions/goals"
 import { getGoalAttachments, deleteGoalAttachment, uploadMultipleGoalAttachments } from "@/actions/goal-attachments"
 import { FileUpload } from "@/components/ui/file-upload"
@@ -486,6 +485,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   isAssignee={isAnyAssignee}
                   currentGoalStatus={goal.status}
                   goalDepartment={goal.department}
+                  supportDepartments={goal.support?.map((s: any) => s.support_name) || []}
                 />
               </div>
             </div>

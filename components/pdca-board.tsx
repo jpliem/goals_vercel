@@ -453,6 +453,14 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   // Calculate overdue goals
   const overdueGoals = userRelevantGoals.filter(goal => isGoalOverdue(goal)).length
   
+  // Calculate supporting goals (goals where user's department is providing support)
+  const supportingGoals = userRelevantGoals.filter(goal => {
+    if (!goal.support || !userProfile.department) return false
+    // Goal has support from user's department AND it's not their own department's goal
+    return goal.support.some((s: any) => s.support_name === userProfile.department) && 
+           goal.department !== userProfile.department
+  }).length
+  
 
   // Get bottleneck stage (highest count excluding completed)
   const bottleneckStage = stageData
@@ -605,7 +613,7 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
         
         <CardContent className="space-y-3">
           {/* Progress Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="text-center p-2 bg-blue-50 rounded-lg" title="Active goals (excluding completed goals)">
               <div className="text-2xl font-bold text-blue-600">{activeGoals.length}</div>
               <div className="text-sm text-gray-600">Active Goals</div>
@@ -617,6 +625,13 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
             <div className="text-center p-2 bg-red-50 rounded-lg" title="Goals past their target date that are still active">
               <div className="text-2xl font-bold text-red-600">{overdueGoals}</div>
               <div className="text-sm text-gray-600">Overdue Goals</div>
+            </div>
+            <div className="text-center p-2 bg-purple-50 rounded-lg" title="Goals where your department is providing support to other departments">
+              <div className="text-2xl font-bold text-purple-600 flex items-center justify-center gap-1">
+                <HandHeart className="h-6 w-6" />
+                {supportingGoals}
+              </div>
+              <div className="text-sm text-gray-600">Supporting Goals</div>
             </div>
           </div>
 
@@ -644,18 +659,6 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
           </div>
 
 
-          {/* Bottleneck Alert */}
-          {bottleneckStage.count > 3 && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center gap-2 text-red-700">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Bottleneck Detected</span>
-              </div>
-              <div className="text-sm text-red-600 mt-1">
-                {bottleneckStage.label} stage has {bottleneckStage.count} goals - consider reviewing capacity
-              </div>
-            </div>
-          )}
 
           {/* Selected Stage Details */}
           {selectedStage && (
@@ -690,9 +693,9 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                         }`}
                         onClick={() => handleGoalClick(goal)}
                       >
-                        <CardContent className="p-6">
-                          {/* Header with subject and status */}
-                          <div className="space-y-4">
+                        <CardContent className="p-4">
+                          {/* Compact header with title and badges */}
+                          <div className="space-y-3">
                             <div className="flex items-start justify-between">
                               <div className="flex-1 min-w-0 pr-2">
                                 <h4 className={`font-semibold text-base leading-tight transition-colors ${
@@ -705,7 +708,7 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="text-xs h-7 px-2"
+                                  className="text-xs h-6 px-2"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     window.open(`/dashboard/goals/${goal.id}`, '_blank')
@@ -717,22 +720,40 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                               </div>
                             </div>
                             
-                            {/* Status and Priority Badges */}
+                            {/* Compact badges row */}
                             <div className="flex flex-wrap gap-2">
                               <FocusIndicator isFocused={goal.isFocused || false} showBadge />
                               {isMyGoal && (
                                 <Badge className="text-xs bg-green-100 text-green-800 border-green-200 font-medium">
-                                  👤 MY GOAL
+                                  <User className="h-3 w-3 mr-1" />
+                                  MY GOAL
                                 </Badge>
                               )}
+                              {(() => {
+                                // Check if user's department is supporting this goal
+                                const isSupporting = goal.support?.some((s: any) => s.support_name === userProfile.department)
+                                const isDepartmentOwned = goal.department === userProfile.department
+                                
+                                if (isSupporting && !isDepartmentOwned) {
+                                  return (
+                                    <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-200 font-medium">
+                                      <HandHeart className="h-3 w-3 mr-1" />
+                                      SUPPORTING
+                                    </Badge>
+                                  )
+                                }
+                                return null
+                              })()}
                               {isOnHold && (
                                 <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200 font-medium">
-                                  ⏸️ ON HOLD
+                                  <Pause className="h-3 w-3 mr-1" />
+                                  ON HOLD
                                 </Badge>
                               )}
                               {isOverdue && (
                                 <Badge className="text-xs bg-red-100 text-red-800 border-red-200 font-medium">
-                                  ⚠️ OVERDUE
+                                  <AlertCircle className="h-3 w-3 mr-1" />
+                                  OVERDUE
                                 </Badge>
                               )}
                               <Badge className={`text-xs font-medium ${getPriorityColor(goal.priority)}`}>
@@ -740,53 +761,55 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                               </Badge>
                               {goal.support && goal.support.length > 0 && (
                                 <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 font-medium">
-                                  🤝 {goal.support.length} Support
+                                  <HandHeart className="h-3 w-3 mr-1" />
+                                  {goal.support.length} Support
                                 </Badge>
                               )}
                             </div>
                           </div>
 
-                          {/* Goal Content */}
-                          <div className="space-y-6">
+                          {/* Compact Goal Content */}
+                          <div className="space-y-3">
                             {/* Description */}
                             {goal.description && (
                               <div>
-                                <h5 className="text-sm font-medium text-gray-900 mb-2">Description</h5>
+                                <h5 className="text-sm font-medium text-gray-900 mb-1">Description</h5>
                                 <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                                   {goal.description}
                                 </p>
                               </div>
                             )}
                             
-                            {/* Target Metrics */}
-                            {goal.target_metrics && (
-                              <div>
-                                <h5 className="text-sm font-medium text-gray-900 mb-2">Target Metrics</h5>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {goal.target_metrics}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {/* Success Criteria */}
-                            {goal.success_criteria && (
-                              <div>
-                                <h5 className="text-sm font-medium text-gray-900 mb-2">Success Criteria</h5>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {goal.success_criteria}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {/* Metadata in Two-Column Layout */}
-                            <div className="border-t pt-4">
-                              <div className="grid grid-cols-2 gap-4 text-sm">
+                            {/* Target Metrics and Success Criteria in compact rows */}
+                            <div className="grid grid-cols-1 gap-3">
+                              {goal.target_metrics && (
                                 <div>
-                                  <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                    <Building className="h-4 w-4" />
-                                    <span className="font-medium">Department</span>
+                                  <h5 className="text-sm font-medium text-gray-900 mb-1">Target Metrics</h5>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                    {goal.target_metrics}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {goal.success_criteria && (
+                                <div>
+                                  <h5 className="text-sm font-medium text-gray-900 mb-1">Success Criteria</h5>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                    {goal.success_criteria}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Compact Metadata */}
+                            <div className="border-t pt-3">
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <div className="flex items-center gap-2 text-gray-600 mb-1">
+                                    <Building className="h-3 w-3" />
+                                    <span className="text-xs font-medium">Department</span>
                                   </div>
-                                  <div className="text-gray-900">{goal.department || 'No Department'}</div>
+                                  <div className="text-gray-900 text-xs">{goal.department || 'No Department'}</div>
                                   {goal.teams && goal.teams.length > 0 && (
                                     <div className="text-xs text-gray-500 mt-1">
                                       Teams: {goal.teams.join(', ')}
@@ -794,41 +817,41 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                                   )}
                                 </div>
                                 <div>
-                                  <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                    <User className="h-4 w-4" />
-                                    <span className="font-medium">PIC</span>
+                                  <div className="flex items-center gap-2 text-gray-600 mb-1">
+                                    <User className="h-3 w-3" />
+                                    <span className="text-xs font-medium">PIC</span>
                                   </div>
-                                  <div className="text-gray-900">{goal.owner?.full_name || 'Unknown'}</div>
+                                  <div className="text-gray-900 text-xs">{goal.owner?.full_name || 'Unknown'}</div>
+                                  {goal.target_date && (
+                                    <div className={`text-xs mt-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                      Due: {new Date(goal.adjusted_target_date || goal.target_date).toLocaleDateString()}
+                                      {isOverdue && ' (OVERDUE)'}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               
-                              {/* Support Status */}
+                              {/* Compact Support Status */}
                               {goal.support && goal.support.length > 0 && (
-                                <div className="mt-4 pt-3 border-t">
+                                <div className="mt-3 pt-2 border-t">
                                   <div className="flex items-center gap-2 text-gray-600 mb-2">
-                                    <HandHeart className="h-4 w-4" />
-                                    <span className="font-medium">Support Status</span>
+                                    <HandHeart className="h-3 w-3" />
+                                    <span className="text-xs font-medium">Support Departments</span>
                                   </div>
-                                  <div className="space-y-1">
-                                    {goal.support.slice(0, 3).map((support: any) => (
-                                      <div key={support.id} className="flex items-center justify-between text-xs">
-                                        <span className="text-gray-700">{support.support_name}</span>
-                                        <Badge 
-                                          variant={
-                                            support.status === 'Completed' ? 'default' :
-                                            support.status === 'Accepted' ? 'secondary' :
-                                            support.status === 'Declined' ? 'destructive' : 'outline'
-                                          }
-                                          className="text-xs"
-                                        >
-                                          {support.status || 'Accepted'}
-                                        </Badge>
-                                      </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {goal.support.slice(0, 4).map((support: any) => (
+                                      <Badge 
+                                        key={support.id}
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {support.support_name}
+                                      </Badge>
                                     ))}
-                                    {goal.support.length > 3 && (
-                                      <div className="text-xs text-gray-500">
-                                        +{goal.support.length - 3} more...
-                                      </div>
+                                    {goal.support.length > 4 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{goal.support.length - 4} more
+                                      </Badge>
                                     )}
                                   </div>
                                 </div>
@@ -836,9 +859,9 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                             </div>
                           </div>
 
-                          {/* Assignee Information with Avatars */}
+                          {/* Compact Assignee Information */}
                           {goal.assignees && goal.assignees.length > 0 && (
-                            <div className="space-y-2">
+                            <div className="space-y-2 mt-3 pt-2 border-t">
                               <div className="flex items-center gap-1 text-xs">
                                 <Users className="h-3 w-3 text-gray-500" />
                                 <span className="font-medium text-gray-600">
@@ -872,19 +895,6 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                                   </div>
                                 )}
                               </div>
-                            </div>
-                          )}
-                          
-                          {/* Target Date and Timeline */}
-                          {goal.target_date && (
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Calendar className="h-3 w-3" />
-                              <span>Due: {formatDate(goal.target_date)?.text || new Date(goal.target_date).toLocaleDateString()}</span>
-                              {formatDate(goal.target_date)?.isOverdue && (
-                                <Badge className="text-xs bg-red-100 text-red-800 border-red-200">
-                                  OVERDUE
-                                </Badge>
-                              )}
                             </div>
                           )}
                         </CardContent>

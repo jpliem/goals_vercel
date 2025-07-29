@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react"
 import type { GoalWithDetails, UserRecord } from "@/lib/goal-database"
-import { getGoalsWithSupportRequests } from "@/lib/goal-database"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronRight, AlertCircle, Clock, CheckCircle, User, Edit, UserPlus, Filter, Target, TrendingUp, HandHeart } from "lucide-react"
+import { ChevronDown, ChevronRight, AlertCircle, Clock, CheckCircle, User, Edit, UserPlus, Filter, Target, TrendingUp, HandHeart, Building2, Users, Calendar } from "lucide-react"
 import { EditGoalModal } from "@/components/modals/edit-goal-modal"
 import { AssignGoalAssigneeModal } from "@/components/modals/assign-goal-assignee-modal"
 import { FocusIndicator } from "@/components/ui/focus-indicator"
@@ -78,7 +77,7 @@ const getUserRelevantGoals = (goals: GoalWithDetails[], userProfile: UserRecord,
 }
 
 export function DepartmentDashboard({ goals, userProfile, users, userDepartmentPermissions = [], departmentTeamMappings }: DepartmentDashboardProps) {
-  const [openSections, setOpenSections] = useState<string[]>(["main-section", "support-requests"])
+  const [openSections, setOpenSections] = useState<string[]>(["main-section"])
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState<GoalWithDetails | null>(null)
@@ -87,9 +86,6 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
   const [hideCompleted, setHideCompleted] = useState(false)
   const [hideCompletedGoals, setHideCompletedGoals] = useState(true)
   
-  // Support requests state
-  const [supportRequests, setSupportRequests] = useState<GoalWithDetails[]>([])
-  const [loadingSupportRequests, setLoadingSupportRequests] = useState(false)
   
   // Load filter preferences from localStorage
   useEffect(() => {
@@ -114,24 +110,6 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
     localStorage.setItem('departmentDashboardFilters', JSON.stringify(filters))
   }, [hideCompleted, hideCompletedGoals])
 
-  // Load support requests for Head users
-  useEffect(() => {
-    if (userProfile.role === 'Head' && userProfile.department) {
-      setLoadingSupportRequests(true)
-      getGoalsWithSupportRequests(userProfile.department)
-        .then(result => {
-          if (result.data) {
-            setSupportRequests(result.data)
-          }
-        })
-        .catch(error => {
-          console.error('Error loading support requests:', error)
-        })
-        .finally(() => {
-          setLoadingSupportRequests(false)
-        })
-    }
-  }, [userProfile.role, userProfile.department])
 
   const toggleSection = (sectionId: string) => {
     setOpenSections(prev => 
@@ -258,163 +236,150 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
     const hasSupport = goal.support?.some((s: any) => s.support_name === userProfile.department)
     const isDepartmentOwned = goal.department === userProfile.department
 
+    // Determine relationship type for better visual hierarchy
+    const getRelationshipBadge = () => {
+      if (isMyGoal && isDepartmentOwned) {
+        return (
+          <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
+            <User className="h-3 w-3 mr-1" />
+            My Dept Goal
+          </Badge>
+        )
+      }
+      if (isMyGoal) {
+        return (
+          <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200">
+            <User className="h-3 w-3 mr-1" />
+            My Goal
+          </Badge>
+        )
+      }
+      if (isDepartmentOwned) {
+        return (
+          <Badge className="text-xs bg-green-100 text-green-800 border-green-200">
+            <Building2 className="h-3 w-3 mr-1" />
+            Dept Goal
+          </Badge>
+        )
+      }
+      if (hasSupport) {
+        return (
+          <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+            <HandHeart className="h-3 w-3 mr-1" />
+            Supporting
+          </Badge>
+        )
+      }
+      return null
+    }
+
     return (
-      <Card className={`hover:shadow-md transition-shadow ${isOverdue ? 'border-l-4 border-l-red-500' : ''}`}>
-        <CardContent className="p-4">
+      <Card className={`hover:shadow-md transition-shadow ${isOverdue ? 'border-l-4 border-l-red-500 bg-red-50/30' : ''}`}>
+        <CardContent className="p-3">
+          {/* Header row with title, relationship, and key badges */}
           <div className="flex items-start justify-between mb-2">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0 mr-3">
               <div className="flex items-center gap-2 mb-1">
                 <Link 
                   href={`/dashboard/goals/${goal.id}`}
-                  className="font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors truncate"
+                  title={goal.subject}
                 >
                   {goal.subject}
                 </Link>
                 <FocusIndicator isFocused={goal.isFocused || false} showBadge />
-                {isMyGoal && (
-                  <Badge variant="secondary" className="text-xs">
-                    My Goal
-                  </Badge>
-                )}
-                {isDepartmentOwned && (
-                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                    Department Goal
-                  </Badge>
-                )}
-                {!isDepartmentOwned && hasSupport && (
-                  <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                    Supporting
-                  </Badge>
-                )}
+                {getRelationshipBadge()}
               </div>
               
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <span>{goal.department}</span>
-                {goal.teams && goal.teams.length > 0 && <span>• {goal.teams.join(', ')}</span>}
-                <span>• Owner: {goal.owner?.full_name}</span>
+              {/* Compact department and owner info */}
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <span className="font-medium">{goal.department}</span>
+                {goal.teams && goal.teams.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="text-xs">{goal.teams.join(', ')}</span>
+                  </>
+                )}
+                <span>•</span>
+                <span className="text-xs">by {goal.owner?.full_name}</span>
               </div>
+            </div>
 
-              <div className="flex flex-wrap gap-1 mb-2">
-                <Badge className={`text-xs ${getStatusColor(goal.status)}`}>
-                  <StatusIcon className="h-3 w-3 mr-1" />
-                  {goal.status}
-                </Badge>
-                <Badge className={`text-xs ${getPriorityColor(goal.priority)}`}>
-                  {goal.priority}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {goal.goal_type}
-                </Badge>
-              </div>
+            {/* Status and priority badges in top-right */}
+            <div className="flex flex-col gap-1 items-end">
+              <Badge className={`text-xs ${getStatusColor(goal.status)}`}>
+                <StatusIcon className="h-3 w-3 mr-1" />
+                {goal.status}
+              </Badge>
+              <Badge className={`text-xs ${getPriorityColor(goal.priority)}`}>
+                {goal.priority}
+              </Badge>
+            </div>
+          </div>
 
-              {goal.target_date && (
-                <div className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                  Target: {new Date(goal.adjusted_target_date || goal.target_date).toLocaleDateString()}
-                  {isOverdue && ' (Overdue)'}
-                </div>
-              )}
-
+          {/* Bottom row with assignees, target date, and actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4 text-xs text-gray-500 flex-1">
               {goal.assignees && goal.assignees.length > 0 && (
-                <div className="text-xs text-gray-500 mt-1">
-                  Assignees: {goal.assignees.map((a: any) => a.users?.full_name || a.full_name || 'Unknown').join(', ')}
+                <div className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  <span className="truncate max-w-32">
+                    {goal.assignees.length === 1 
+                      ? (goal.assignees[0] as any).users?.full_name || (goal.assignees[0] as any).assignee_name || 'Unknown'
+                      : `${goal.assignees.length} assignees`
+                    }
+                  </span>
                 </div>
               )}
-            </div>
-
-            <div className="flex gap-1 ml-2">
-              {userProfile.role === "Admin" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedGoal(goal)
-                      setEditModalOpen(true)
-                    }}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedGoal(goal)
-                      setAssignModalOpen(true)
-                    }}
-                  >
-                    <UserPlus className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const SupportGoalCard = ({ goal }: { goal: GoalWithDetails }) => {
-    const isOverdue = isGoalOverdue(goal)
-    const StatusIcon = getStatusIcon(goal.status)
-    
-    // Find the support request for this department
-    const supportRequest = goal.support?.find((s: any) => s.support_name === userProfile.department)
-
-    return (
-      <Card className={`hover:shadow-md transition-shadow border-l-4 border-l-blue-500`}>
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Link 
-                  href={`/dashboard/goals/${goal.id}`}
-                  className="font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                >
-                  {goal.subject}
-                </Link>
-                <FocusIndicator isFocused={goal.isFocused || false} showBadge />
-                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                  Support Request
-                </Badge>
-              </div>
               
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <span>From: {goal.department}</span>
-                {goal.teams && goal.teams.length > 0 && <span>• {goal.teams.join(', ')}</span>}
-                <span>• Owner: {goal.owner?.full_name}</span>
-              </div>
-
-              <div className="flex flex-wrap gap-1 mb-2">
-                <Badge className={`text-xs ${getStatusColor(goal.status)}`}>
-                  <StatusIcon className="h-3 w-3 mr-1" />
-                  {goal.status}
-                </Badge>
-                <Badge className={`text-xs ${getPriorityColor(goal.priority)}`}>
-                  {goal.priority}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {goal.goal_type}
-                </Badge>
-              </div>
-
               {goal.target_date && (
-                <div className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                  Target: {new Date(goal.adjusted_target_date || goal.target_date).toLocaleDateString()}
-                  {isOverdue && ' (Overdue)'}
+                <div className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
+                  <Calendar className="h-3 w-3" />
+                  <span>
+                    {new Date(goal.adjusted_target_date || goal.target_date).toLocaleDateString()}
+                    {isOverdue && ' (OVERDUE)'}
+                  </span>
                 </div>
               )}
-
-              {supportRequest && (
-                <div className="text-xs text-blue-600 mt-1 font-medium">
-                  Support Type: {supportRequest.support_type}
-                </div>
-              )}
+              
+              <Badge variant="outline" className="text-xs">
+                {goal.goal_type}
+              </Badge>
             </div>
+
+            {/* Action buttons */}
+            {userProfile.role === "Admin" && (
+              <div className="flex gap-1 ml-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => {
+                    setSelectedGoal(goal)
+                    setEditModalOpen(true)
+                  }}
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => {
+                    setSelectedGoal(goal)
+                    setAssignModalOpen(true)
+                  }}
+                >
+                  <UserPlus className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
     )
   }
+
 
   return (
     <div className="space-y-6">
@@ -499,7 +464,7 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="pt-0">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {statusGoals.map(goal => (
                       <GoalCard key={goal.id} goal={goal} />
                     ))}
@@ -511,52 +476,6 @@ export function DepartmentDashboard({ goals, userProfile, users, userDepartmentP
         )
       })}
 
-      {/* Support Requests Section for Head Users */}
-      {userProfile.role === 'Head' && (
-        <Card>
-          <Collapsible 
-            open={openSections.includes("support-requests")} 
-            onOpenChange={() => toggleSection("support-requests")}
-          >
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    {openSections.includes("support-requests") ? 
-                      <ChevronDown className="h-4 w-4" /> : 
-                      <ChevronRight className="h-4 w-4" />
-                    }
-                    <HandHeart className="h-5 w-5" />
-                    Support Requests
-                    <Badge className="bg-blue-100 text-blue-800">
-                      {supportRequests.length}
-                    </Badge>
-                  </CardTitle>
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="pt-0">
-                {loadingSupportRequests ? (
-                  <div className="text-center py-4 text-gray-500">
-                    Loading support requests...
-                  </div>
-                ) : supportRequests.length > 0 ? (
-                  <div className="space-y-3">
-                    {supportRequests.map(goal => (
-                      <SupportGoalCard key={goal.id} goal={goal} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    No support requests for your department
-                  </div>
-                )}
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
-      )}
 
       {/* Empty State */}
       {totalGoals === 0 && (

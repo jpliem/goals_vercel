@@ -904,43 +904,7 @@ export async function updateGoalSupport(supportId: string, updates: {
   }
 }
 
-export async function getGoalsWithSupportRequests(department: string) {
-  try {
-    if (!supabaseAdmin) {
-      // Return mock data - filter goals that have support requests for this department
-      const supportGoals = mockGoals.filter(g => 
-        g.support && g.support.some((s: any) => s.support_name === department)
-      )
-      return { data: supportGoals, error: null }
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from("goal_support")
-      .select(`
-        goals!goal_support_goal_id_fkey(
-          *,
-          owner:users!goals_owner_id_fkey(*),
-          current_assignee:users!goals_current_assignee_id_fkey(*),
-          assignees:goal_assignees(*, user:users(*)),
-          tasks:goal_tasks(*, 
-            assigned_user:users!goal_tasks_assigned_to_fkey(*), 
-            assigned_by_user:users!goal_tasks_assigned_by_fkey(*)
-          ),
-          support:goal_support(*)
-        )
-      `)
-      .eq("support_name", department)
-      .eq("status", "Accepted")
-      
-    // Extract goals from the support request results
-    const goals = data?.map((item: any) => item.goals).filter(Boolean) || []
-
-    return { data: goals, error }
-  } catch (error) {
-    console.error("Get goals with support requests error:", error)
-    return { data: null, error: error }
-  }
-}
+// Support requests feature removed - support departments now automatically provide task assignee access
 
 // Attachment functions
 export async function uploadGoalAttachment(attachmentData: {

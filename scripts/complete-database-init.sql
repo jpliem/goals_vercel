@@ -146,7 +146,8 @@ CREATE TABLE public.goal_attachments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create goal_support table for department support requests
+-- Create goal_support table for department support
+-- Simplified: No approval process - adding support makes their employees available for tasks
 CREATE TABLE public.goal_support (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     goal_id UUID NOT NULL REFERENCES public.goals(id) ON DELETE CASCADE,
@@ -154,10 +155,7 @@ CREATE TABLE public.goal_support (
     support_name TEXT NOT NULL,
     support_department TEXT,
     requested_by UUID NOT NULL REFERENCES public.users(id),
-    status TEXT DEFAULT 'Requested' CHECK (status IN ('Requested', 'Accepted', 'Declined', 'Completed')),
     notes TEXT,
-    responded_by UUID REFERENCES public.users(id),
-    responded_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -190,6 +188,49 @@ CREATE TABLE public.two_weeks_focus_requests (
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, goal_id, focus_date)
+);
+
+-- Create workflow_rules table for configurable PDCA workflow rules
+CREATE TABLE public.workflow_rules (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    rule_type TEXT NOT NULL CHECK (rule_type IN ('phase_completion_threshold', 'mandatory_fields', 'validation_rule', 'notification_rule', 'duration_limit')),
+    phase TEXT CHECK (phase IN ('Plan', 'Do', 'Check', 'Act', 'All')),
+    configuration JSONB NOT NULL DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_by UUID REFERENCES public.users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create workflow_configurations table for custom status transitions
+CREATE TABLE public.workflow_configurations (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    transitions JSONB NOT NULL DEFAULT '{}', -- Store allowed transitions as JSON
+    role_permissions JSONB DEFAULT '{}', -- Role-based permissions for transitions
+    status_colors JSONB DEFAULT '{}', -- Custom colors for statuses
+    status_icons JSONB DEFAULT '{}', -- Custom icons for statuses
+    is_active BOOLEAN DEFAULT false,
+    is_default BOOLEAN DEFAULT false,
+    created_by UUID REFERENCES public.users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create audit_logs table for admin operations
+CREATE TABLE public.audit_logs (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES public.users(id),
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL, -- 'goal', 'user', 'department', 'workflow_rule', etc.
+    entity_id TEXT,
+    old_data JSONB,
+    new_data JSONB,
+    metadata JSONB DEFAULT '{}',
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create goal_tasks table for detailed task management within goals (WITH PDCA PHASE)
@@ -267,6 +308,16 @@ CREATE INDEX idx_department_permissions_user ON public.department_permissions(us
 CREATE INDEX idx_department_permissions_department ON public.department_permissions(department);
 CREATE INDEX idx_two_weeks_focus_user_date ON public.two_weeks_focus_requests(user_id, focus_date);
 CREATE INDEX idx_two_weeks_focus_goal ON public.two_weeks_focus_requests(goal_id);
+
+-- Workflow admin indexes
+CREATE INDEX idx_workflow_rules_type ON public.workflow_rules(rule_type);
+CREATE INDEX idx_workflow_rules_phase ON public.workflow_rules(phase);
+CREATE INDEX idx_workflow_rules_active ON public.workflow_rules(is_active);
+CREATE INDEX idx_workflow_configurations_active ON public.workflow_configurations(is_active);
+CREATE INDEX idx_workflow_configurations_default ON public.workflow_configurations(is_default);
+CREATE INDEX idx_audit_logs_user ON public.audit_logs(user_id);
+CREATE INDEX idx_audit_logs_entity ON public.audit_logs(entity_type, entity_id);
+CREATE INDEX idx_audit_logs_created ON public.audit_logs(created_at DESC);
 
 -- =============================================================================
 -- CREATE FUNCTIONS
@@ -507,6 +558,17 @@ CREATE TRIGGER goal_tasks_updated_at_trigger
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Workflow admin triggers
+CREATE TRIGGER workflow_rules_updated_at_trigger
+    BEFORE UPDATE ON public.workflow_rules
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER workflow_configurations_updated_at_trigger
+    BEFORE UPDATE ON public.workflow_configurations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- =============================================================================
 -- CREATE VIEWS
 -- =============================================================================
@@ -560,6 +622,9 @@ ALTER TABLE public.goal_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.goal_support ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.goal_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_configurations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Users table policies
 CREATE POLICY "Users can view all active users" ON public.users
@@ -665,6 +730,53 @@ CREATE POLICY "Users can update their notifications" ON public.notifications
     FOR UPDATE
     USING (user_id = auth.uid());
 
+-- Workflow admin policies
+CREATE POLICY "Only admins can manage workflow rules" ON public.workflow_rules
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'Admin'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'Admin'
+        )
+    );
+
+CREATE POLICY "Only admins can manage workflow configurations" ON public.workflow_configurations
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'Admin'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'Admin'
+        )
+    );
+
+-- Users can view their own audit logs, admins can view all
+CREATE POLICY "Users can view relevant audit logs" ON public.audit_logs
+    FOR SELECT
+    USING (
+        user_id = auth.uid() OR
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'Admin'
+        )
+    );
+
+-- Only system can insert audit logs
+CREATE POLICY "System can insert audit logs" ON public.audit_logs
+    FOR INSERT
+    WITH CHECK (true);
+
 -- =============================================================================
 -- GRANT PERMISSIONS
 -- =============================================================================
@@ -674,6 +786,11 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO authenticated;
+
+-- Specific grants for workflow admin tables
+GRANT ALL ON public.workflow_rules TO authenticated;
+GRANT ALL ON public.workflow_configurations TO authenticated;
+GRANT ALL ON public.audit_logs TO authenticated;
 
 -- =============================================================================
 -- STORAGE BUCKET SETUP

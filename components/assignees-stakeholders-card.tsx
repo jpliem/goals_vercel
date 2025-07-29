@@ -103,24 +103,21 @@ export function AssigneesStakeholdersCard({ goal, assignees }: AssigneesStakehol
           <div>
             <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              Support Requirements
+              Supporting Departments
             </h4>
             <div className="space-y-2">
               {goal.support.map((support: any, index: number) => (
-                <div key={index} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                <div key={index} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-blue-900">
                       {support.support_name}
                     </div>
-                    <div className="text-xs text-gray-600">
-                      {support.support_type}
+                    <div className="text-xs text-blue-600">
+                      {support.support_type} Support
                     </div>
                   </div>
-                  <Badge 
-                    variant={support.status === 'Accepted' ? 'default' : 'outline'}
-                    className="text-xs"
-                  >
-                    {support.status || 'Accepted'}
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                    Supporting
                   </Badge>
                 </div>
               ))}

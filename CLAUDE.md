@@ -58,13 +58,17 @@ The system implements Plan-Do-Check-Act methodology:
 - **goals** - PDCA status, multi-assignee support, workflow history
 - **goal_tasks** - Tasks with PDCA phase, assigned_to, assigned_by relationships, completion_notes
 - **goal_assignees** - Goal-level assignments (separate from task assignments)
+- **goal_support** - Simple support department tracking (no approval process)
 - **notifications** - Includes task assignment notifications with auto-cleanup
 
 ### Database Setup
 ```bash
-# Run in order:
+# For new installations:
 1. scripts/complete-database-init.sql  # Main schema with all tables
 2. scripts/seed-test-data.sql         # Optional test data
+
+# For existing installations with old support system:
+1. scripts/update-goal-support-schema.sql  # Removes status columns from goal_support
 ```
 
 ### Key Query Patterns
