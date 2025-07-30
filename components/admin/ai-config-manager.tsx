@@ -43,7 +43,8 @@ export function AIConfigManager({ initialConfig }: AIConfigManagerProps) {
     description: initialConfig?.description || "",
     ollama_url: initialConfig?.ollama_url || "https://ollama.iotech.my.id",
     model_name: initialConfig?.model_name || "",
-    system_prompt: initialConfig?.system_prompt || "You are an AI assistant helping analyze project goals and tasks. Provide detailed, actionable insights.",
+    system_prompt: initialConfig?.system_prompt || "You are an AI assistant helping analyze project goals and tasks. Please analyze: {goal_data} and provide detailed, actionable insights and recommendations.",
+    meta_prompt: initialConfig?.meta_prompt || "You are an executive AI assistant. Please provide a comprehensive meta-analysis of the following analyses. Identify patterns, trends, common issues, and strategic insights across all analyses.\n\n{analysis_data}\n\nPlease provide:\n1. Executive Summary - Key insights across all analyses\n2. Common Patterns - Recurring themes and issues\n3. Departmental Insights - Department-specific observations\n4. Risk Assessment - Organization-wide risks identified\n5. Strategic Recommendations - High-level action items for leadership\n6. Success Factors - What's working well across goals\n\nFocus on strategic, actionable insights for leadership decision-making.",
     temperature: initialConfig?.temperature || 0.7,
     max_tokens: initialConfig?.max_tokens || 1000
   })
@@ -140,7 +141,7 @@ export function AIConfigManager({ initialConfig }: AIConfigManagerProps) {
           </TabsTrigger>
           <TabsTrigger value="prompts" className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            System Prompts
+            Prompt Template
           </TabsTrigger>
         </TabsList>
 
@@ -270,22 +271,46 @@ export function AIConfigManager({ initialConfig }: AIConfigManagerProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-green-600" />
-                System Prompt Configuration
+                Prompt Template Configuration
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="system_prompt">System Prompt</Label>
+                <Label htmlFor="system_prompt">Prompt Template</Label>
                 <Textarea
                   id="system_prompt"
                   value={config.system_prompt}
                   onChange={(e) => setConfig({...config, system_prompt: e.target.value})}
                   rows={6}
-                  placeholder="Define how the AI should behave and respond..."
+                  placeholder="You are an AI assistant helping analyze project goals. Please analyze: {goal_data} and provide comprehensive recommendations."
                 />
-                <p className="text-xs text-muted-foreground mt-2">
-                  This prompt defines the AI's role and behavior. It will be used for all analysis types.
-                </p>
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Use <code className="bg-gray-100 px-1 rounded">{'{goal_data}'}</code> to insert complete goal information (title, tasks, comments, etc.)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    If no <code className="bg-gray-100 px-1 rounded">{'{goal_data}'}</code> variable is used, this will work as a system prompt with the old format.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="meta_prompt">Meta-Analysis Prompt Template</Label>
+                <Textarea
+                  id="meta_prompt"
+                  value={config.meta_prompt}
+                  onChange={(e) => setConfig({...config, meta_prompt: e.target.value})}
+                  rows={8}
+                  placeholder="You are an executive AI assistant. Please provide a comprehensive meta-analysis of the following analyses: {analysis_data}"
+                />
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Use <code className="bg-gray-100 px-1 rounded">{'{analysis_data}'}</code> to insert all goal analyses data for meta-summary generation
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    This template is used when generating executive meta-summaries that analyze patterns across multiple goal analyses.
+                  </p>
+                </div>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-lg">

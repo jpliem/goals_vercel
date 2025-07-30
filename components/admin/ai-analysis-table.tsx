@@ -18,9 +18,14 @@ import {
   Eye,
   ChevronUp,
   ChevronDown,
-  Loader2
+  Loader2,
+  Trash2,
+  BarChart3
 } from "lucide-react"
 import { AnalysisModal } from "./analysis-modal"
+import { PromptPreviewModal } from "../modals/prompt-preview-modal"
+import { MetaSummaryModal } from "../modals/meta-summary-modal"
+import { MetaPromptPreviewModal } from "../modals/meta-prompt-preview-modal"
 
 interface Goal {
   id: string
@@ -47,6 +52,8 @@ export function AIAnalysisTable() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState<string | null>(null)
+  const [generatingMetaSummary, setGeneratingMetaSummary] = useState(false)
+  const [deletingAnalysis, setDeletingAnalysis] = useState<string | null>(null)
   
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState("")
@@ -59,6 +66,16 @@ export function AIAnalysisTable() {
   // Modal state
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [promptPreviewOpen, setPromptPreviewOpen] = useState(false)
+  const [previewGoalId, setPreviewGoalId] = useState<string | null>(null)
+  const [previewGoalTitle, setPreviewGoalTitle] = useState("")
+  
+  // Meta-summary states
+  const [metaSummaries, setMetaSummaries] = useState<any[]>([])
+  const [loadingMetaSummaries, setLoadingMetaSummaries] = useState(false)
+  const [metaSummaryModalOpen, setMetaSummaryModalOpen] = useState(false)
+  const [selectedMetaSummary, setSelectedMetaSummary] = useState<any>(null)
+  const [metaPromptPreviewOpen, setMetaPromptPreviewOpen] = useState(false)
 
   // Load goals with analysis data
   const loadGoals = async () => {
@@ -77,6 +94,26 @@ export function AIAnalysisTable() {
       console.error('Error loading goals:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Load meta-summaries
+  const loadMetaSummaries = async () => {
+    setLoadingMetaSummaries(true)
+    
+    try {
+      const { getMetaSummaries } = await import('@/actions/ollama-integration')
+      const result = await getMetaSummaries()
+      
+      if (result.error) {
+        console.error('Error loading meta-summaries:', result.error)
+      } else {
+        setMetaSummaries(result.data || [])
+      }
+    } catch (err) {
+      console.error('Error loading meta-summaries:', err)
+    } finally {
+      setLoadingMetaSummaries(false)
     }
   }
 
@@ -111,6 +148,137 @@ export function AIAnalysisTable() {
         analysis: goal.latest_analysis
       })
       setModalOpen(true)
+    }
+  }
+
+  // Preview prompt
+  const handlePreviewPrompt = (goal: Goal) => {
+    setPreviewGoalId(goal.id)
+    setPreviewGoalTitle(goal.subject)
+    setPromptPreviewOpen(true)
+  }
+
+  // Handle analysis from prompt preview
+  const handleAnalyzeFromPreview = async (analysisType: string, customPrompt?: string) => {
+    if (previewGoalId) {
+      // If custom prompt is provided, use it directly
+      if (customPrompt) {
+        setAnalyzing(previewGoalId)
+        setError(null)
+        
+        try {
+          const { generateAIAnalysis } = await import('@/actions/ollama-integration')
+          const result = await generateAIAnalysis(previewGoalId, 'custom', customPrompt)
+          
+          if (result.error) {
+            setError(result.error)
+          } else {
+            // Reload goals to show new analysis
+            await loadGoals()
+          }
+        } catch (err) {
+          setError('Failed to generate AI analysis. Please try again.')
+          console.error('Error generating analysis:', err)
+        } finally {
+          setAnalyzing(null)
+        }
+      } else {
+        // Use regular analysis flow with default 'custom' type
+        await handleAnalyze(previewGoalId, 'custom')
+      }
+    }
+  }
+
+  // Handle meta-summary generation
+  const handleGenerateMetaSummary = async (customPrompt?: string) => {
+    setGeneratingMetaSummary(true)
+    setError(null)
+    
+    try {
+      const { generateMetaSummary } = await import('@/actions/ollama-integration')
+      const result = await generateMetaSummary(customPrompt)
+      
+      if (result.error) {
+        setError(result.error)
+      } else {
+        // Reload both goals and meta-summaries
+        await Promise.all([loadGoals(), loadMetaSummaries()])
+      }
+    } catch (err) {
+      setError('Failed to generate meta-summary. Please try again.')
+      console.error('Error generating meta-summary:', err)
+    } finally {
+      setGeneratingMetaSummary(false)
+    }
+  }
+
+  // Handle meta-prompt preview
+  const handlePreviewMetaPrompt = () => {
+    setMetaPromptPreviewOpen(true)
+  }
+
+  // Handle meta-summary generation from preview
+  const handleAnalyzeFromMetaPreview = async (customPrompt?: string) => {
+    await handleGenerateMetaSummary(customPrompt)
+  }
+
+  // Handle analysis deletion
+  const handleDeleteAnalysis = async (analysisId: string, goalSubject?: string) => {
+    if (!confirm(`Are you sure you want to delete this analysis${goalSubject ? ` for "${goalSubject}"` : ''}?`)) {
+      return
+    }
+
+    setDeletingAnalysis(analysisId)
+    setError(null)
+    
+    try {
+      const { deleteAIAnalysis } = await import('@/actions/ollama-integration')
+      const result = await deleteAIAnalysis(analysisId)
+      
+      if (result.error) {
+        setError(result.error)
+      } else {
+        // Reload goals to reflect deletion
+        await loadGoals()
+      }
+    } catch (err) {
+      setError('Failed to delete analysis. Please try again.')
+      console.error('Error deleting analysis:', err)
+    } finally {
+      setDeletingAnalysis(null)
+    }
+  }
+
+  // Handle meta-summary viewing
+  const handleViewMetaSummary = (summary: any) => {
+    setSelectedMetaSummary(summary)
+    setMetaSummaryModalOpen(true)
+  }
+
+  // Handle meta-summary deletion
+  const handleDeleteMetaSummary = async (summaryId: string) => {
+    if (!confirm('Are you sure you want to delete this meta-summary?')) {
+      return
+    }
+
+    setDeletingAnalysis(summaryId)
+    setError(null)
+    
+    try {
+      const { deleteAIAnalysis } = await import('@/actions/ollama-integration')
+      const result = await deleteAIAnalysis(summaryId)
+      
+      if (result.error) {
+        setError(result.error)
+      } else {
+        // Reload meta-summaries to reflect deletion
+        await loadMetaSummaries()
+      }
+    } catch (err) {
+      setError('Failed to delete meta-summary. Please try again.')
+      console.error('Error deleting meta-summary:', err)
+    } finally {
+      setDeletingAnalysis(null)
     }
   }
 
@@ -171,9 +339,10 @@ export function AIAnalysisTable() {
     setFilteredGoals(filtered)
   }, [goals, searchTerm, departmentFilter, statusFilter, analysisFilter, sortBy, sortOrder])
 
-  // Load goals on mount
+  // Load goals and meta-summaries on mount
   useEffect(() => {
     loadGoals()
+    loadMetaSummaries()
   }, [])
 
   // Get unique departments for filter
@@ -210,6 +379,110 @@ export function AIAnalysisTable() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Meta-Summaries Section */}
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-purple-900 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Executive Meta-Summaries
+          </h2>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handlePreviewMetaPrompt}
+              disabled={goals.filter(g => g.latest_analysis).length === 0}
+              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Preview Meta-Prompt
+            </Button>
+            <Button
+              onClick={() => handleGenerateMetaSummary()}
+              disabled={generatingMetaSummary || goals.filter(g => g.latest_analysis).length === 0}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {generatingMetaSummary ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Generate New Meta-Summary ({goals.filter(g => g.latest_analysis).length} analyses)
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {loadingMetaSummaries ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+            <span className="ml-2 text-purple-700">Loading meta-summaries...</span>
+          </div>
+        ) : metaSummaries.length === 0 ? (
+          <div className="text-center py-8">
+            <BarChart3 className="w-12 h-12 text-purple-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-purple-900 mb-2">No Meta-Summaries Yet</h3>
+            <p className="text-purple-700">
+              Generate your first executive meta-summary to analyze patterns across all goal analyses.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {metaSummaries.map((summary) => (
+              <div key={summary.id} className="bg-white border border-purple-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-300">
+                        Meta-Summary
+                      </Badge>
+                      <span className="text-sm text-gray-600">
+                        Created {new Date(summary.created_at).toLocaleDateString()} by {summary.users.full_name}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-700">
+                      {summary.prompt_used}
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      <span>Model: {summary.ai_configurations.model_name}</span>
+                      <span>Tokens: {summary.tokens_used.toLocaleString()}</span>
+                      <span>Time: {Math.round(summary.processing_time_ms / 1000)}s</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewMetaSummary(summary)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteMetaSummary(summary.id)}
+                      disabled={deletingAnalysis === summary.id}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      {deletingAnalysis === summary.id ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-1" />
+                      )}
+                      {deletingAnalysis === summary.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Filters and Search */}
       <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
@@ -372,15 +645,40 @@ export function AIAnalysisTable() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     {goal.latest_analysis && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleViewAnalysis(goal)}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewAnalysis(goal)}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteAnalysis(goal.latest_analysis.id, goal.subject)}
+                          disabled={deletingAnalysis === goal.latest_analysis.id}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          {deletingAnalysis === goal.latest_analysis.id ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4 mr-1" />
+                          )}
+                          {deletingAnalysis === goal.latest_analysis.id ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      </>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePreviewPrompt(goal)}
+                      disabled={analyzing === goal.id}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      Preview Prompt
+                    </Button>
                     <Button
                       size="sm"
                       onClick={() => handleAnalyze(goal.id)}
@@ -418,6 +716,29 @@ export function AIAnalysisTable() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         analysisData={selectedAnalysis}
+      />
+
+      {/* Prompt Preview Modal */}
+      <PromptPreviewModal
+        isOpen={promptPreviewOpen}
+        onClose={() => setPromptPreviewOpen(false)}
+        goalId={previewGoalId || ''}
+        goalTitle={previewGoalTitle}
+        onAnalyze={handleAnalyzeFromPreview}
+      />
+
+      {/* Meta-Summary Modal */}
+      <MetaSummaryModal
+        isOpen={metaSummaryModalOpen}
+        onClose={() => setMetaSummaryModalOpen(false)}
+        summary={selectedMetaSummary}
+      />
+
+      {/* Meta-Prompt Preview Modal */}
+      <MetaPromptPreviewModal
+        isOpen={metaPromptPreviewOpen}
+        onClose={() => setMetaPromptPreviewOpen(false)}
+        onAnalyze={handleAnalyzeFromMetaPreview}
       />
     </div>
   )

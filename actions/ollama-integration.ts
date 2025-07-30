@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { requireAuth } from "@/lib/auth"
 import { supabaseAdmin } from "@/lib/database"
+import { buildAnalysisPrompt, buildPureGoalData, buildMetaAnalysisData } from "@/lib/ai-prompt-utils"
 
 interface OllamaModel {
   name: string
@@ -22,6 +23,7 @@ interface AIConfigData {
   ollama_url: string
   model_name: string
   system_prompt?: string
+  meta_prompt?: string
   temperature?: number
   max_tokens?: number
 }
@@ -180,11 +182,14 @@ export async function saveAIConfiguration(config: AIConfigData): Promise<{ succe
         ollama_url: config.ollama_url,
         model_name: config.model_name,
         system_prompt: config.system_prompt || null,
+        meta_prompt: config.meta_prompt || null,
         temperature: config.temperature || 0.7,
         max_tokens: config.max_tokens || 1000,
         is_active: true,
         created_by: user.id,
         updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'name'
       })
       .select('id')
       .single()
@@ -341,6 +346,17 @@ export async function generateAIAnalysis(
     const systemPrompt = config.system_prompt || "You are an AI assistant helping analyze project goals and tasks."
     const userPrompt = customPrompt || buildAnalysisPrompt(goalData, analysisType)
 
+    // Check if system prompt contains {goal_data} template variable
+    let completePrompt
+    if (systemPrompt.includes('{goal_data}')) {
+      // Use template substitution with pure goal data only
+      const pureGoalData = buildPureGoalData(goalData)
+      completePrompt = systemPrompt.replace('{goal_data}', pureGoalData)
+    } else {
+      // Use old format for backward compatibility
+      completePrompt = `${systemPrompt}\n\nUser Request: ${userPrompt}`
+    }
+
     // Call Ollama API
     const apiUrl = config.ollama_url.endsWith('/') ? config.ollama_url + 'api/generate' : config.ollama_url + '/api/generate'
     const startTime = Date.now()
@@ -352,7 +368,7 @@ export async function generateAIAnalysis(
       },
       body: JSON.stringify({
         model: config.model_name,
-        prompt: `${systemPrompt}\n\nUser Request: ${userPrompt}`,
+        prompt: completePrompt,
         stream: false,
         options: {
           temperature: config.temperature,
@@ -372,22 +388,51 @@ export async function generateAIAnalysis(
     const result = await response.json()
     const endTime = Date.now()
 
-    // Save analysis to database
-    const { data: analysisData, error: dbError } = await supabaseAdmin
+    // Check if analysis already exists for this goal
+    const { data: existingAnalysis } = await supabaseAdmin
       .from('goal_ai_analysis')
-      .insert({
-        goal_id: goalId,
-        ai_config_id: config.id,
-        analysis_type: analysisType,
-        prompt_used: userPrompt,
-        analysis_result: result.response || "No response generated",
-        confidence_score: null, // Ollama doesn't provide confidence scores
-        tokens_used: (result.prompt_eval_count || 0) + (result.eval_count || 0),
-        processing_time_ms: endTime - startTime,
-        requested_by: user.id
-      })
       .select('id')
-      .single()
+      .eq('goal_id', goalId)
+      .maybeSingle()
+
+    // Use upsert to replace existing analysis or create new one
+    const analysisPayload = {
+      goal_id: goalId,
+      ai_config_id: config.id,
+      analysis_type: analysisType,
+      prompt_used: userPrompt,
+      analysis_result: result.response || "No response generated",
+      confidence_score: null, // Ollama doesn't provide confidence scores
+      tokens_used: (result.prompt_eval_count || 0) + (result.eval_count || 0),
+      processing_time_ms: endTime - startTime,
+      requested_by: user.id,
+      created_at: new Date().toISOString()
+    }
+
+    let analysisData, dbError
+
+    if (existingAnalysis && existingAnalysis.id) {
+      // Update existing analysis
+      const { data, error } = await supabaseAdmin
+        .from('goal_ai_analysis')
+        .update(analysisPayload)
+        .eq('id', existingAnalysis.id as string)
+        .select('id')
+        .single()
+      
+      analysisData = data
+      dbError = error
+    } else {
+      // Insert new analysis
+      const { data, error } = await supabaseAdmin
+        .from('goal_ai_analysis')
+        .insert(analysisPayload)
+        .select('id')
+        .single()
+      
+      analysisData = data
+      dbError = error
+    }
 
     if (dbError) {
       console.error("Error saving AI analysis:", dbError)
@@ -408,8 +453,8 @@ export async function generateAIAnalysis(
   }
 }
 
-// Helper function to compile comprehensive goal data
-async function compileGoalData(goalId: string) {
+// Helper function to compile comprehensive goal data (exported for prompt preview)
+export async function compileGoalData(goalId: string) {
   if (!supabaseAdmin) return null
 
   try {
@@ -449,83 +494,385 @@ async function compileGoalData(goalId: string) {
   }
 }
 
-// Helper function to build analysis prompt based on type
-function buildAnalysisPrompt(goalData: any, analysisType: string): string {
-  const currentDate = new Date().toISOString().split('T')[0]
-  const isOverdue = goalData.target_date && new Date(goalData.target_date) < new Date()
-  
-  const baseInfo = `
-GOAL ANALYSIS REQUEST
 
-Goal: ${goalData.subject}
-Department: ${goalData.department}
-Status: ${goalData.status}
-Priority: ${goalData.priority}
-Start Date: ${goalData.start_date || 'Not set'}
-Target Date: ${goalData.target_date || 'Not set'}
-Current Date: ${currentDate}
-${isOverdue ? '⚠️ OVERDUE' : ''}
+// Delete AI analysis
+export async function deleteAIAnalysis(analysisId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth()
+    
+    if (!supabaseAdmin) {
+      return { success: false, error: "Database not available" }
+    }
 
-Description: ${goalData.description}
+    // Check if the analysis exists and if user has permission to delete it
+    const { data: analysis, error: fetchError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select('id, requested_by, goal_id')
+      .eq('id', analysisId)
+      .single()
 
-${goalData.target_metrics ? `Target Metrics: ${goalData.target_metrics}` : ''}
-${goalData.success_criteria ? `Success Criteria: ${goalData.success_criteria}` : ''}
+    if (fetchError || !analysis) {
+      return { success: false, error: "Analysis not found" }
+    }
 
-Tasks (${goalData.tasks?.length || 0}):
-${goalData.tasks?.map((task: any, index: number) => 
-  `${index + 1}. [${task.status.toUpperCase()}] ${task.title} (${task.pdca_phase} phase)${task.completion_notes ? ` - ${task.completion_notes}` : ''}`
-).join('\n') || 'No tasks defined'}
+    // User can delete their own analyses, or admins can delete any
+    if (analysis.requested_by !== user.id && user.role !== 'Admin') {
+      return { success: false, error: "Permission denied" }
+    }
 
-Comments & Updates (${goalData.comments?.length || 0}):
-${goalData.comments?.map((comment: any, index: number) => 
-  `${index + 1}. ${comment.user?.full_name || 'Unknown'} (${new Date(comment.created_at).toLocaleDateString()}): ${comment.comment}`
-).join('\n') || 'No comments'}
+    const { error } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .delete()
+      .eq('id', analysisId)
 
-Team:
-- Owner: ${goalData.owner?.full_name || 'Unknown'}
-- Assignees: ${goalData.assignees?.map((a: any) => a.user?.full_name).join(', ') || 'None'}
-- Supporting Departments: ${goalData.support?.map((s: any) => s.support_name).join(', ') || 'None'}
-`
+    if (error) {
+      console.error("Database error deleting AI analysis:", error)
+      return { success: false, error: "Failed to delete analysis" }
+    }
 
-  switch (analysisType) {
-    case 'risk_assessment':
-      return baseInfo + `
-Please provide a comprehensive risk assessment for this goal, including:
-1. Identified risks and potential blockers
-2. Risk severity and likelihood
-3. Mitigation strategies
-4. Early warning indicators to monitor`
+    revalidatePath("/admin/ai-analysis")
+    
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting AI analysis:", error)
+    return { success: false, error: "Failed to delete AI analysis" }
+  }
+}
 
-    case 'optimization_suggestions':
-      return baseInfo + `
-Please analyze this goal and provide optimization suggestions:
-1. Areas for improvement in goal structure or approach
-2. Task organization and sequencing recommendations
-3. Resource allocation suggestions
-4. Timeline optimization opportunities`
+// Generate meta-summary of all AI analyses
+export async function generateMetaSummary(customPrompt?: string): Promise<{ success: boolean; error?: string; analysisId?: string }> {
+  try {
+    const user = await requireAuth()
+    
+    if (!supabaseAdmin) {
+      return { success: false, error: "Database not available" }
+    }
 
-    case 'progress_review':
-      return baseInfo + `
-Please provide a detailed progress review:
-1. Current progress assessment against timeline
-2. Task completion analysis by PDCA phase
-3. Identification of bottlenecks or delays
-4. Recommendations for acceleration`
+    // Get active AI configuration
+    const configResult = await getActiveAIConfiguration()
+    if (!configResult.data) {
+      return { success: false, error: "No active AI configuration found. Please configure AI settings first." }
+    }
 
-    case 'task_breakdown':
-      return baseInfo + `
-Please suggest additional tasks or task improvements:
-1. Missing tasks for successful goal completion
-2. Task dependencies and sequencing
-3. PDCA phase alignment recommendations
-4. Resource and timeline estimates for new tasks`
+    const config = configResult.data
 
-    default: // 'custom'
-      return baseInfo + `
-Please provide a comprehensive analysis of this goal including:
-1. Overall assessment of goal structure and progress
-2. Risk identification and mitigation strategies
-3. Optimization opportunities and recommendations
-4. Next steps and action items for improved success`
+    // Fetch all analyses that user has access to (excluding meta-summaries)
+    const { data: analyses, error: fetchError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select(`
+        id,
+        analysis_result,
+        analysis_type,
+        created_at,
+        goal_id,
+        goals!goal_ai_analysis_goal_id_fkey(subject, department, status)
+      `)
+      .not('analysis_type', 'eq', 'meta_summary')
+      .not('goal_id', 'is', null)
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      console.error("Error fetching analyses:", fetchError)
+      return { success: false, error: "Failed to fetch analyses for summary" }
+    }
+
+    if (!analyses || analyses.length === 0) {
+      return { success: false, error: "No goal analyses found to summarize" }
+    }
+
+    // Build analysis data for template substitution
+    const analysisData = buildMetaAnalysisData(analyses)
+    
+    // Use custom prompt if provided, otherwise use configured meta_prompt
+    const metaPromptTemplate = customPrompt || config.meta_prompt || `You are an executive AI assistant. Please provide a comprehensive meta-analysis of the following analyses. Identify patterns, trends, common issues, and strategic insights across all analyses.
+
+{analysis_data}
+
+Please provide:
+1. Executive Summary - Key insights across all analyses
+2. Common Patterns - Recurring themes and issues
+3. Departmental Insights - Department-specific observations
+4. Risk Assessment - Organization-wide risks identified
+5. Strategic Recommendations - High-level action items for leadership
+6. Success Factors - What's working well across goals
+
+Focus on strategic, actionable insights for leadership decision-making.`
+    
+    // Check if meta prompt contains {analysis_data} template variable
+    let metaPrompt
+    if (metaPromptTemplate.includes('{analysis_data}')) {
+      metaPrompt = metaPromptTemplate.replace('{analysis_data}', analysisData)
+    } else {
+      // Use old format for backward compatibility
+      metaPrompt = `${metaPromptTemplate}\n\n${analysisData}`
+    }
+
+    // Call Ollama API
+    const apiUrl = config.ollama_url.endsWith('/') ? config.ollama_url + 'api/generate' : config.ollama_url + '/api/generate'
+    const startTime = Date.now()
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model_name,
+        prompt: metaPrompt,
+        stream: false,
+        options: {
+          temperature: config.temperature,
+          num_predict: config.max_tokens
+        }
+      }),
+      signal: AbortSignal.timeout(120000) // 2 minute timeout for meta-analysis
+    })
+
+    if (!response.ok) {
+      return { 
+        success: false, 
+        error: `Meta-analysis generation failed: ${response.status} ${response.statusText}` 
+      }
+    }
+
+    const result = await response.json()
+    const endTime = Date.now()
+
+    // Save meta-summary to database
+    const { data: metaData, error: dbError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .insert({
+        goal_id: null, // NULL for meta-summaries
+        ai_config_id: config.id,
+        analysis_type: 'meta_summary',
+        prompt_used: customPrompt ? `Custom meta-prompt: ${customPrompt.substring(0, 100)}...` : `Meta-analysis of ${analyses.length} goal analyses`,
+        analysis_result: result.response || "No meta-summary generated",
+        confidence_score: null,
+        tokens_used: (result.prompt_eval_count || 0) + (result.eval_count || 0),
+        processing_time_ms: endTime - startTime,
+        requested_by: user.id
+      })
+      .select('id')
+      .single()
+
+    if (dbError) {
+      console.error("Error saving meta-summary:", dbError)
+      return { success: false, error: "Failed to save meta-summary" }
+    }
+
+    revalidatePath("/admin/ai-analysis")
+    
+    return { success: true, analysisId: (metaData as any)?.id }
+  } catch (error) {
+    console.error("Error generating meta-summary:", error)
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, error: "Meta-analysis timeout - please try again" }
+    }
+    
+    return { success: false, error: "Failed to generate meta-summary" }
+  }
+}
+
+// Get all saved meta-summaries
+export async function getMetaSummaries(): Promise<{ data: any[] | null; error: string | null }> {
+  try {
+    const user = await requireAuth()
+    
+    if (!supabaseAdmin) {
+      return { data: null, error: "Database not available" }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select(`
+        id,
+        analysis_result,
+        prompt_used,
+        tokens_used,
+        processing_time_ms,
+        created_at,
+        requested_by,
+        ai_config_id,
+        users!goal_ai_analysis_requested_by_fkey(full_name, email),
+        ai_configurations!goal_ai_analysis_ai_config_id_fkey(name, model_name)
+      `)
+      .eq('analysis_type', 'meta_summary')
+      .is('goal_id', null)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error("Database error fetching meta-summaries:", error)
+      return { data: null, error: "Failed to fetch meta-summaries" }
+    }
+
+    return { data: data || [], error: null }
+  } catch (error) {
+    console.error("Error fetching meta-summaries:", error)
+    return { data: null, error: "Failed to fetch meta-summaries" }
+  }
+}
+
+// Function to build complete prompt for preview (exported for prompt preview)
+export async function buildCompletePrompt(goalId: string, analysisType: string = 'custom', customPrompt?: string): Promise<{ 
+  systemPrompt: string; 
+  userPrompt: string; 
+  completePrompt: string; 
+  error?: string 
+}> {
+  try {
+    // Get active AI configuration
+    const configResult = await getActiveAIConfiguration()
+    if (!configResult.data) {
+      return { 
+        systemPrompt: '', 
+        userPrompt: '', 
+        completePrompt: '', 
+        error: "No active AI configuration found. Please configure AI settings first." 
+      }
+    }
+
+    const config = configResult.data
+
+    // Get comprehensive goal data
+    const goalData = await compileGoalData(goalId)
+    if (!goalData) {
+      return { 
+        systemPrompt: '', 
+        userPrompt: '', 
+        completePrompt: '', 
+        error: "Failed to compile goal data" 
+      }
+    }
+
+    // Build the prompts
+    const systemPrompt = config.system_prompt || "You are an AI assistant helping analyze project goals and tasks."
+    const userPrompt = customPrompt || buildAnalysisPrompt(goalData, analysisType)
+    
+    // Check if system prompt contains {goal_data} template variable
+    let completePrompt
+    if (systemPrompt.includes('{goal_data}')) {
+      // Use template substitution with pure goal data only
+      const pureGoalData = buildPureGoalData(goalData)
+      completePrompt = systemPrompt.replace('{goal_data}', pureGoalData)
+    } else {
+      // Use old format for backward compatibility
+      completePrompt = `${systemPrompt}\n\nUser Request: ${userPrompt}`
+    }
+
+    return {
+      systemPrompt,
+      userPrompt,
+      completePrompt
+    }
+  } catch (error) {
+    console.error("Error building complete prompt:", error)
+    return { 
+      systemPrompt: '', 
+      userPrompt: '', 
+      completePrompt: '', 
+      error: "Failed to build prompt" 
+    }
+  }
+}
+
+// Function to build complete meta-analysis prompt for preview (exported for meta-prompt preview)
+export async function buildCompleteMetaPrompt(customPrompt?: string): Promise<{ 
+  metaPrompt: string; 
+  analysisData: string; 
+  completePrompt: string; 
+  analysisCount: number;
+  error?: string 
+}> {
+  try {
+    // Get active AI configuration
+    const configResult = await getActiveAIConfiguration()
+    if (!configResult.data) {
+      return { 
+        metaPrompt: '', 
+        analysisData: '', 
+        completePrompt: '', 
+        analysisCount: 0,
+        error: "No active AI configuration found. Please configure AI settings first." 
+      }
+    }
+
+    const config = configResult.data
+
+    if (!supabaseAdmin) {
+      return { 
+        metaPrompt: '', 
+        analysisData: '', 
+        completePrompt: '', 
+        analysisCount: 0,
+        error: "Database not available" 
+      }
+    }
+
+    // Fetch all analyses (same logic as generateMetaSummary)
+    const { data: analyses, error: fetchError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select(`
+        id,
+        analysis_result,
+        analysis_type,
+        created_at,
+        goal_id,
+        goals!goal_ai_analysis_goal_id_fkey(subject, department, status)
+      `)
+      .not('analysis_type', 'eq', 'meta_summary')
+      .not('goal_id', 'is', null)
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      return { 
+        metaPrompt: '', 
+        analysisData: '', 
+        completePrompt: '', 
+        analysisCount: 0,
+        error: "Failed to fetch analyses for preview" 
+      }
+    }
+
+    if (!analyses || analyses.length === 0) {
+      return { 
+        metaPrompt: '', 
+        analysisData: '', 
+        completePrompt: '', 
+        analysisCount: 0,
+        error: "No goal analyses found to preview" 
+      }
+    }
+
+    // Build the analysis data
+    const analysisData = buildMetaAnalysisData(analyses)
+    
+    // Use custom prompt if provided, otherwise use configured meta_prompt
+    const metaPrompt = customPrompt || config.meta_prompt || "You are an executive AI assistant. Please provide a comprehensive meta-analysis of the following analyses."
+    
+    // Check if meta prompt contains {analysis_data} template variable
+    let completePrompt
+    if (metaPrompt.includes('{analysis_data}')) {
+      completePrompt = metaPrompt.replace('{analysis_data}', analysisData)
+    } else {
+      // Use old format for backward compatibility
+      completePrompt = `${metaPrompt}\n\n${analysisData}`
+    }
+
+    return {
+      metaPrompt,
+      analysisData,
+      completePrompt,
+      analysisCount: analyses.length
+    }
+  } catch (error) {
+    console.error("Error building complete meta prompt:", error)
+    return { 
+      metaPrompt: '', 
+      analysisData: '', 
+      completePrompt: '', 
+      analysisCount: 0,
+      error: "Failed to build meta prompt" 
+    }
   }
 }

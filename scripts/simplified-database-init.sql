@@ -219,6 +219,7 @@ CREATE TABLE public.ai_configurations (
     ollama_url TEXT NOT NULL,
     model_name TEXT NOT NULL,
     system_prompt TEXT,
+    meta_prompt TEXT,
     temperature DECIMAL(3,2) DEFAULT 0.7 CHECK (temperature >= 0 AND temperature <= 2),
     max_tokens INTEGER DEFAULT 1000,
     is_active BOOLEAN DEFAULT true,
@@ -230,16 +231,17 @@ CREATE TABLE public.ai_configurations (
 -- Create goal AI analysis table for saved AI analysis results
 CREATE TABLE public.goal_ai_analysis (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    goal_id UUID NOT NULL REFERENCES public.goals(id) ON DELETE CASCADE,
+    goal_id UUID REFERENCES public.goals(id) ON DELETE CASCADE,
     ai_config_id UUID NOT NULL REFERENCES public.ai_configurations(id),
-    analysis_type TEXT NOT NULL CHECK (analysis_type IN ('risk_assessment', 'optimization_suggestions', 'progress_review', 'task_breakdown', 'custom')),
+    analysis_type TEXT NOT NULL CHECK (analysis_type IN ('risk_assessment', 'optimization_suggestions', 'progress_review', 'task_breakdown', 'custom', 'meta_summary')),
     prompt_used TEXT NOT NULL,
     analysis_result TEXT NOT NULL,
     confidence_score DECIMAL(3,2) CHECK (confidence_score >= 0 AND confidence_score <= 1),
     tokens_used INTEGER,
     processing_time_ms INTEGER,
     requested_by UUID NOT NULL REFERENCES public.users(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT goal_ai_analysis_goal_id_unique UNIQUE (goal_id)
 );
 
 -- =============================================================================
@@ -300,6 +302,7 @@ CREATE INDEX idx_goal_ai_analysis_config ON public.goal_ai_analysis(ai_config_id
 CREATE INDEX idx_goal_ai_analysis_type ON public.goal_ai_analysis(analysis_type);
 CREATE INDEX idx_goal_ai_analysis_requested_by ON public.goal_ai_analysis(requested_by);
 CREATE INDEX idx_goal_ai_analysis_created_at ON public.goal_ai_analysis(created_at DESC);
+CREATE INDEX idx_goal_ai_analysis_meta_summary ON public.goal_ai_analysis(analysis_type, goal_id) WHERE analysis_type = 'meta_summary' AND goal_id IS NULL;
 
 -- =============================================================================
 -- CREATE ESSENTIAL FUNCTIONS ONLY
@@ -745,6 +748,15 @@ CREATE POLICY "Users can create AI analysis for accessible goals" ON public.goal
         requested_by = auth.uid()
     );
 
+-- Meta-summary specific policies
+CREATE POLICY "Users can view meta summaries" ON public.goal_ai_analysis
+    FOR SELECT
+    USING (analysis_type = 'meta_summary' AND goal_id IS NULL);
+
+CREATE POLICY "Users can create meta summaries" ON public.goal_ai_analysis
+    FOR INSERT
+    WITH CHECK (analysis_type = 'meta_summary' AND goal_id IS NULL AND requested_by = auth.uid());
+
 -- =============================================================================
 -- GRANT PERMISSIONS
 -- =============================================================================
@@ -811,10 +823,13 @@ COMMENT ON TABLE public.users IS 'System users with role-based permissions';
 COMMENT ON TABLE public.goal_assignees IS 'Multi-assignee support for goals';
 COMMENT ON TABLE public.notifications IS 'Real-time notification system including task assignments';
 COMMENT ON TABLE public.ai_configurations IS 'AI configuration settings for Ollama connections and prompts';
-COMMENT ON TABLE public.goal_ai_analysis IS 'Saved AI analysis results for goals with usage tracking';
+COMMENT ON TABLE public.goal_ai_analysis IS 'Saved AI analysis results for goals with usage tracking. Supports both individual goal analyses and meta-summaries (goal_id = NULL)';
 COMMENT ON COLUMN public.ai_configurations.temperature IS 'AI model temperature setting (0-2, controls randomness)';
-COMMENT ON COLUMN public.goal_ai_analysis.analysis_type IS 'Type of AI analysis performed on the goal';
+COMMENT ON COLUMN public.ai_configurations.meta_prompt IS 'Template prompt for meta-analysis of multiple goal analyses. Use {analysis_data} variable for data substitution.';
+COMMENT ON COLUMN public.goal_ai_analysis.goal_id IS 'Goal ID for individual analyses, NULL for meta-summaries that analyze multiple goals. UNIQUE constraint ensures only one analysis per goal.';
+COMMENT ON COLUMN public.goal_ai_analysis.analysis_type IS 'Type of AI analysis performed: individual goal types or meta_summary for comprehensive analysis of multiple goals';
 COMMENT ON COLUMN public.goal_ai_analysis.confidence_score IS 'AI confidence score for the analysis (0-1)';
+COMMENT ON CONSTRAINT goal_ai_analysis_goal_id_unique ON public.goal_ai_analysis IS 'Ensures only one analysis per goal. NULL values allowed for meta-summaries.';
 
 -- =============================================================================
 -- SIMPLIFIED INITIALIZATION COMPLETE

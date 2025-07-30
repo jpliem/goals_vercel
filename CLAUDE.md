@@ -45,12 +45,20 @@ The system implements Plan-Do-Check-Act methodology:
   - Department-based task separation in UI
   - Can oversee all department goals
 
+#### AI Analysis System
+- **`actions/ollama-integration.ts`** - Ollama AI integration for goal analysis and meta-summaries
+- **Template System** - Configurable prompts with variable substitution (`{goal_data}`, `{analysis_data}`)
+- **Analysis Types** - Individual goal analysis and executive meta-summaries across multiple goals
+- **One Analysis Per Goal** - UNIQUE constraint ensures only latest analysis is kept per goal
+- **Preview System** - Users can preview and edit AI prompts before execution
+
 ### Recent Architectural Decisions
-1. **Modal refresh optimization** - Force re-render using `renderKey` when `localGoal.status` changes
-2. **Task completion notes** - Added completion_notes display throughout UI components
-3. **UI simplification** - Combined department/teams display, removed redundant sections
-4. **Task creator visibility** - Added `assigned_by_user` to task queries
-5. **Manual progression only** - Removed automatic phase progression based on task completion
+1. **AI Analysis Replacement** - Changed from INSERT to UPDATE/INSERT to maintain one analysis per goal
+2. **Modal refresh optimization** - Force re-render using `renderKey` when `localGoal.status` changes
+3. **Task completion notes** - Added completion_notes display throughout UI components
+4. **UI simplification** - Combined department/teams display, removed redundant sections
+5. **Task creator visibility** - Added `assigned_by_user` to task queries
+6. **Manual progression only** - Removed automatic phase progression based on task completion
 
 ## Database Schema
 
@@ -60,16 +68,14 @@ The system implements Plan-Do-Check-Act methodology:
 - **goal_assignees** - Goal-level assignments (separate from task assignments)
 - **goal_support** - Simple support department tracking (no approval process)
 - **notifications** - Includes task assignment notifications with auto-cleanup
+- **ai_configurations** - Ollama connection settings, prompt templates (system_prompt, meta_prompt)
+- **goal_ai_analysis** - AI analysis results with UNIQUE constraint on goal_id (one per goal)
 
 ### Database Setup
 ```bash
-# For new installations (recommended):
-1. scripts/simplified-database-init.sql  # Clean schema without unimplemented features
+# For new installations:
+1. scripts/simplified-database-init.sql  # Complete schema with AI support
 2. scripts/seed-test-data.sql           # Optional test data
-
-# Alternative (includes unimplemented workflow features):
-1. scripts/complete-database-init.sql   # Full schema with unused tables
-2. scripts/seed-test-data.sql          # Optional test data
 ```
 
 ### Key Query Patterns
@@ -82,6 +88,21 @@ tasks:goal_tasks(*,
 
 // Check user role for conditional logic
 const isHead = userProfile.role === 'Head'
+
+// AI analysis replacement pattern (one per goal)
+const { data: existingAnalysis } = await supabaseAdmin
+  .from('goal_ai_analysis')
+  .select('id')
+  .eq('goal_id', goalId)
+  .maybeSingle()
+
+if (existingAnalysis) {
+  // Update existing
+  await supabaseAdmin.from('goal_ai_analysis').update(payload).eq('id', existingAnalysis.id)
+} else {
+  // Insert new
+  await supabaseAdmin.from('goal_ai_analysis').insert(payload)
+}
 ```
 
 ## Component Patterns
@@ -152,6 +173,27 @@ const separateTasksByDepartment = (tasks) => {
 )}
 ```
 
+### AI Prompt Template System
+```typescript
+// Template variable substitution
+const buildCompletePrompt = (template: string, data: any) => {
+  if (template.includes('{goal_data}')) {
+    const goalData = buildPureGoalData(data)
+    return template.replace('{goal_data}', goalData)
+  }
+  // Backward compatibility
+  return `${template}\n\nUser Request: ${buildAnalysisPrompt(data)}`
+}
+
+// Prompt preview with editing
+const [editedPrompt, setEditedPrompt] = useState(originalPrompt)
+const [isEditMode, setIsEditMode] = useState(false)
+
+// Generate with custom or template prompt
+const customPrompt = isEditMode && editedPrompt !== originalPrompt ? editedPrompt : undefined
+await generateAIAnalysis(goalId, 'custom', customPrompt)
+```
+
 ## Common Implementation Patterns
 
 ### Server Actions
@@ -168,6 +210,13 @@ const separateTasksByDepartment = (tasks) => {
 - Max 5MB, stored in `goal-attachments/{goalId}/`
 - Validate on both client and server
 - Supported: JPEG, PNG, GIF, WebP, PDF, DOC, DOCX, TXT
+
+### AI Integration
+- **Configuration**: Admin-only AI configuration management in `/admin/ai-config`
+- **Analysis**: Individual goal analysis with configurable prompts
+- **Meta-summaries**: Executive summaries across multiple goal analyses
+- **Template Variables**: `{goal_data}` for individual, `{analysis_data}` for meta-summaries
+- **Preview System**: Users can preview and edit prompts before AI execution
 
 ## Current UI/UX Patterns
 
@@ -208,3 +257,12 @@ SUPABASE_SERVICE_ROLE_KEY=
 4. **Performance**: Use Server Components by default, Client Components only for interactivity
 5. **Modal Refresh**: When updating status in modals, use force re-render pattern with `renderKey`
 6. **Task Completion**: Always include completion_notes in task interfaces and display components
+7. **AI Analysis**: Use UPDATE/INSERT pattern to maintain one analysis per goal
+8. **Template Testing**: Test AI prompts in preview mode before configuring templates
+
+## Testing AI Integration
+
+- **Ollama Setup**: Configure Ollama URL and model in AI Settings
+- **Template Testing**: Use preview functionality to test prompt templates
+- **Analysis Validation**: Verify only one analysis exists per goal after generation
+- **Meta-summaries**: Test with multiple goal analyses for comprehensive summaries

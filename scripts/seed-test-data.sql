@@ -1,6 +1,6 @@
--- Clean Seed Data Script
--- This script populates the database with basic organizational structure
--- Run this AFTER complete-database-init.sql
+-- Seed Test Data Script
+-- This script populates the database with basic organizational structure and test data
+-- Run this AFTER simplified-database-init.sql
 
 -- =============================================================================
 -- INSERT SINGLE ADMIN USER
@@ -34,14 +34,12 @@ INSERT INTO public.department_teams (department, team) VALUES
 ('Operation', 'Admin Project'),
 ('Operation', 'Production'),
 ('Operation', 'Workshop'),
---Workshop
 
 -- Engineer Department teams
 ('Engineer', 'Mechanical Engineering'),
 ('Engineer', 'Electrical Engineering'),
 ('Engineer', 'Site Engineering'),
 ('Engineer', 'Estimator'),
---Estimator
 
 -- Sales Department teams
 ('Sales', 'ABB'),
@@ -68,11 +66,12 @@ INSERT INTO public.department_permissions (user_id, department, created_by) VALU
     ('11111111-1111-1111-1111-111111111111', 'HR', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'IT', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Finance', '11111111-1111-1111-1111-111111111111'),
-    ('11111111-1111-1111-1111-111111111111', 'Project', '11111111-1111-1111-1111-111111111111'),
+    ('11111111-1111-1111-1111-111111111111', 'Operation', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Engineer', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Sales', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Marketing', '11111111-1111-1111-1111-111111111111'),
-    ('11111111-1111-1111-1111-111111111111', 'Government Relations', '11111111-1111-1111-1111-111111111111')
+    ('11111111-1111-1111-1111-111111111111', 'Government Relations', '11111111-1111-1111-1111-111111111111'),
+    ('11111111-1111-1111-1111-111111111111', 'Product Development', '11111111-1111-1111-1111-111111111111')
 ON CONFLICT (user_id, department) DO NOTHING;
 
 -- =============================================================================
