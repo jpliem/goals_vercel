@@ -5,6 +5,8 @@ import { DepartmentManagement } from "@/components/department-management"
 import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
 import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
 import { SimpleUserDataManager } from "@/components/admin/simple-user-data-manager"
+import { SimpleGoalDataManager } from "@/components/admin/simple-goal-data-manager"
+import { SimpleDepartmentDataManager } from "@/components/admin/simple-department-data-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -259,58 +261,10 @@ export default async function SystemConfigPage() {
                 <SimpleUserDataManager />
 
                 {/* Goal Export/Import Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="w-5 h-5 text-green-600" />
-                      Goals
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Button className="w-full">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export Goals
-                      </Button>
-                      <p className="text-xs text-gray-500">Download all goals as CSV/Excel</p>
-                    </div>
-                    
-                    <div className="border-t pt-4 space-y-2">
-                      <Button variant="outline" className="w-full">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Import Goals
-                      </Button>
-                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <SimpleGoalDataManager />
 
                 {/* Department Export/Import Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-purple-600" />
-                      Departments
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Button className="w-full">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export Departments
-                      </Button>
-                      <p className="text-xs text-gray-500">Download department structure as CSV/Excel</p>
-                    </div>
-                    
-                    <div className="border-t pt-4 space-y-2">
-                      <Button variant="outline" className="w-full">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Import Departments
-                      </Button>
-                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <SimpleDepartmentDataManager />
               </div>
             </TabsContent>
           </Tabs>
