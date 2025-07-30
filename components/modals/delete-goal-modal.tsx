@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { ConfirmationInput } from "@/components/ui/confirmation-input" 
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ConfirmationInput } from "@/components/ui/confirmation-input"
 import { 
   Trash2, 
   AlertTriangle, 
@@ -130,7 +129,7 @@ export function DeleteGoalModal({ isOpen, onClose, goalId, onDeleted }: DeleteGo
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -142,8 +141,7 @@ export function DeleteGoalModal({ isOpen, onClose, goalId, onDeleted }: DeleteGo
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : deletionData ? (
-            <ScrollArea className="h-full pr-4">
-              <div className="space-y-6">
+            <div className="space-y-6 pr-4">
                 {/* Warning Alert */}
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
@@ -262,7 +260,6 @@ export function DeleteGoalModal({ isOpen, onClose, goalId, onDeleted }: DeleteGo
                   </Alert>
                 )}
               </div>
-            </ScrollArea>
           ) : null}
         </div>
 

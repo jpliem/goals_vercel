@@ -261,7 +261,9 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
   }
 
   const handleSupportDepartmentAdd = (department: string) => {
-    if (!department || formData.support_requirements.some(req => req.department === department)) return
+    if (!department || 
+        department === formData.department || // Can't add own department as support
+        formData.support_requirements.some(req => req.department === department)) return
     
     setFormData(prev => ({
       ...prev,
@@ -583,7 +585,10 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                       </SelectTrigger>
                       <SelectContent>
                         {availableDepartments
-                          .filter(dept => !formData.support_requirements.some(req => req.department === dept))
+                          .filter(dept => 
+                            dept !== formData.department && // Can't add your own department as support
+                            !formData.support_requirements.some(req => req.department === dept)
+                          )
                           .map((dept) => (
                             <SelectItem key={dept} value={dept}>
                               {dept}
