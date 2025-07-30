@@ -91,7 +91,6 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
     target_date: getDefaultTargetDate(),
     target_metrics: "",
     success_criteria: "",
-    progress_percentage: "0",
     support_requirements: [] as { department: string; teams: string[] }[], // New structure for support
     tasks: [] as {
       title: string;
@@ -213,7 +212,6 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
       if (formData.success_criteria) {
         formDataObj.append("success_criteria", formData.success_criteria)
       }
-      formDataObj.append("progress_percentage", formData.progress_percentage)
       
       // Add support requirements with new structure
       if (formData.support_requirements.length > 0) {

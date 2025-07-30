@@ -25,7 +25,6 @@ export function EditGoalModal({ isOpen, onClose, goal, onUpdate }: EditGoalModal
     target_date: goal.target_date || "",
     target_metrics: goal.target_metrics || "",
     success_criteria: goal.success_criteria || "",
-    progress_percentage: goal.progress_percentage?.toString() || "0"
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -36,7 +35,6 @@ export function EditGoalModal({ isOpen, onClose, goal, onUpdate }: EditGoalModal
     try {
       await updateGoal(goal.id, {
         ...formData,
-        progress_percentage: parseInt(formData.progress_percentage),
         target_date: formData.target_date || null
       })
       onUpdate()
@@ -77,33 +75,19 @@ export function EditGoalModal({ isOpen, onClose, goal, onUpdate }: EditGoalModal
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="progress">Progress (%)</Label>
-              <Input
-                id="progress"
-                type="number"
-                min="0"
-                max="100"
-                value={formData.progress_percentage}
-                onChange={(e) => setFormData({ ...formData, progress_percentage: e.target.value })}
-              />
-            </div>
+          <div>
+            <Label htmlFor="priority">Priority</Label>
+            <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Low">Low</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

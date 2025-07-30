@@ -50,7 +50,6 @@ import { getGoalAttachments, deleteGoalAttachment, uploadMultipleGoalAttachments
 import { FileUpload } from "@/components/ui/file-upload"
 import { GoalWorkflowHistory } from "@/components/goal-workflow-history"
 import { EditGoalModal } from "@/components/modals/edit-goal-modal"
-import { AssigneesStakeholdersCard } from "@/components/assignees-stakeholders-card"
 import { GoalTasksCard } from "@/components/goal-tasks-card"
 
 interface GoalDetailsProps {
@@ -306,6 +305,24 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   )}
                 </div>
                 
+                {/* Stakeholder Summary */}
+                <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                  <Building2 className="h-4 w-4" />
+                  <span>
+                    <span className="font-medium">{goal.department}</span>
+                    <span className="mx-1">•</span>
+                    <span className="text-gray-500">PIC:</span> <span className="font-medium">{goal.owner?.full_name || 'Unknown'}</span>
+                    {goal.support && goal.support.length > 0 && (
+                      <>
+                        <span className="mx-1">•</span>
+                        <span className="text-gray-500">Supporting:</span> <span className="font-medium">
+                          {goal.support.map((s: any) => s.support_name).join(', ')}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                
                 {goal.start_date && (
                   <div className="flex items-center gap-1 text-sm text-gray-600">
                     <Clock className="h-4 w-4" />
@@ -540,7 +557,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
         {/* Main Content Layout */}
         <div className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: Goal Information and Assignees */}
+              {/* Left Column: Goal Information and Comments */}
               <div className="space-y-6">
                 {/* Goal Information */}
                 <Card className="shadow-sm">
@@ -587,11 +604,97 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   </CardContent>
                 </Card>
 
-                {/* Assignees & Stakeholders */}
-                <AssigneesStakeholdersCard goal={goal} assignees={assignees} />
+                {/* Comments & Updates */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                      <MessageSquare className="h-5 w-5 text-blue-600" />
+                      Comments & Updates
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 p-4">
+                    {/* Display existing comments with scrollable container */}
+                    <div>
+                      <h4 className="font-medium text-sm mb-4">Recent Comments</h4>
+                      <div className="max-h-96 overflow-y-auto">
+                        {goal.comments && goal.comments.length > 0 ? (
+                          <div className="space-y-4 pr-2">
+                            {goal.comments.map((comment: any, index: number) => (
+                              <div key={comment.id}>
+                                <div className="border-l-4 border-blue-200 pl-4 py-4 bg-gray-50 rounded-r-lg">
+                                  <div className="flex items-start gap-3">
+                                    {/* User Avatar */}
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-xs font-medium text-blue-700">
+                                        {(comment.user?.full_name || 'Unknown User').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                      </span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="font-medium text-sm text-gray-900">
+                                          {comment.user?.full_name || 'Unknown User'}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {new Date(comment.created_at).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Separator line between comments */}
+                                {index < (goal.comments?.length || 0) - 1 && (
+                                  <hr className="border-gray-200 mt-4" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <MessageSquare className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                            <p className="text-sm">No comments yet</p>
+                            <p className="text-xs text-gray-400 mt-1">Be the first to share an update</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Add Comment Form */}
+                    {canComment && (
+                      <div className="border-t pt-4">
+                        <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <Textarea
+                              placeholder="Share progress updates, challenges, or achievements..."
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              rows={4}
+                              className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                              {newComment.length}/500
+                            </div>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button 
+                              onClick={handleAddComment}
+                              disabled={isLoading || !newComment.trim()}
+                              size="sm"
+                              className="px-4"
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              {isLoading ? 'Adding...' : 'Add Comment'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
 
-              {/* Right Column: Tasks */}
+              {/* Right Column: Tasks and Activity */}
               <div className="space-y-6">
                 <GoalTasksCard
                   goalId={goal.id}
@@ -603,6 +706,19 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   goalDepartment={goal.department}
                   supportDepartments={goal.support?.map((s: any) => s.support_name) || []}
                 />
+
+                {/* Goal Activity & History */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                      <History className="h-5 w-5 text-gray-600" />
+                      Goal Activity & History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
+                  </CardContent>
+                </Card>
               </div>
             </div>
 
@@ -639,110 +755,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
               </Card>
             )}
 
-            {/* Activity & Communications Side-by-Side Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              {/* Left Column: Activity & History */}
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <History className="h-5 w-5 text-gray-600" />
-                    Goal Activity & History
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
-                </CardContent>
-              </Card>
-
-              {/* Right Column: Communications */}
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <MessageSquare className="h-5 w-5 text-blue-600" />
-                    Comments & Updates
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 p-4">
-                  {/* Display existing comments with scrollable container */}
-                  <div>
-                    <h4 className="font-medium text-sm mb-4">Recent Comments</h4>
-                    <div className="max-h-96 overflow-y-auto">
-                      {goal.comments && goal.comments.length > 0 ? (
-                        <div className="space-y-4 pr-2">
-                          {goal.comments.map((comment: any, index: number) => (
-                            <div key={comment.id}>
-                              <div className="border-l-4 border-blue-200 pl-4 py-4 bg-gray-50 rounded-r-lg">
-                                <div className="flex items-start gap-3">
-                                  {/* User Avatar */}
-                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-xs font-medium text-blue-700">
-                                      {(comment.user?.full_name || 'Unknown User').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                                    </span>
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className="font-medium text-sm text-gray-900">
-                                        {comment.user?.full_name || 'Unknown User'}
-                                      </span>
-                                      <span className="text-xs text-gray-500">
-                                        {new Date(comment.created_at).toLocaleString()}
-                                      </span>
-                                    </div>
-                                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              {/* Separator line between comments */}
-                              {index < (goal.comments?.length || 0) - 1 && (
-                                <hr className="border-gray-200 mt-4" />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <MessageSquare className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                          <p className="text-sm">No comments yet</p>
-                          <p className="text-xs text-gray-400 mt-1">Be the first to share an update</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Add Comment Form */}
-                  {canComment && (
-                    <div className="border-t pt-4">
-                      <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
-                      <div className="space-y-4">
-                        <div className="relative">
-                          <Textarea
-                            placeholder="Share progress updates, challenges, or achievements..."
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            rows={4}
-                            className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                          <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                            {newComment.length}/500
-                          </div>
-                        </div>
-                        <div className="flex justify-end">
-                          <Button 
-                            onClick={handleAddComment}
-                            disabled={isLoading || !newComment.trim()}
-                            size="sm"
-                            className="px-4"
-                          >
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            {isLoading ? 'Adding...' : 'Add Comment'}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
         </div>
 
         {/* Modals */}
