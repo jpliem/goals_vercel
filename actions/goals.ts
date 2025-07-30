@@ -8,7 +8,8 @@ import {
   updateGoalStatus as dbUpdateGoalStatus, 
   getGoalById, 
   updateGoalDetails as dbUpdateGoalDetails, 
-  deleteGoal as dbDeleteGoal, 
+  deleteGoal as dbDeleteGoal,
+  getGoalDeletionImpact,
   uploadGoalAttachment,
   assignGoalAssignees as dbAssignGoalAssignees,
   getGoalAssignees,
@@ -709,6 +710,53 @@ export async function completeGoalAssigneeTask(goalId: string, assigneeId: strin
   }
 }
 
+// Get goal deletion impact data
+export async function getGoalDeletionImpactData(goalId: string) {
+  try {
+    const user = await requireAuth()
+
+    // Get goal to check permissions
+    const goalResult = await getGoalById(goalId)
+    if (!goalResult.data) {
+      return { error: "Goal not found" }
+    }
+
+    const goal = goalResult.data
+
+    // Only admin, department head, or goal owner can view deletion impact
+    const canDelete = user.role === "Admin" || 
+                     goal.owner_id === user.id ||
+                     (user.role === "Head" && goal.department === user.department)
+    
+    if (!canDelete) {
+      return { error: "You don't have permission to delete this goal" }
+    }
+
+    const impactResult = await getGoalDeletionImpact(goalId)
+    
+    if (impactResult.error) {
+      return { error: "Failed to get goal deletion impact" }
+    }
+
+    return { 
+      success: true, 
+      data: {
+        goal: {
+          id: goal.id,
+          subject: goal.subject,
+          description: goal.description,
+          department: goal.department,
+          owner: goal.owner
+        },
+        impact: impactResult.data
+      }
+    }
+  } catch (error) {
+    console.error("Get goal deletion impact error:", error)
+    return { error: "Authentication required" }
+  }
+}
+
 export async function deleteGoal(goalId: string) {
   try {
     const user = await requireAuth()
@@ -730,15 +778,35 @@ export async function deleteGoal(goalId: string) {
       return { error: "You don't have permission to delete this goal" }
     }
 
-    const { data, error } = await dbDeleteGoal(goalId)
+    // Get deletion impact for logging
+    const impactResult = await getGoalDeletionImpact(goalId)
+    const impact = impactResult.data || {}
+
+    // Perform the deletion (includes file cleanup)
+    const { data, error, filesDeleted } = await dbDeleteGoal(goalId)
 
     if (error) {
       console.error("Delete goal error:", error)
       return { error: "Failed to delete goal" }
     }
 
+    // Log the deletion (optional - can be added later)
+    console.log(`Goal ${goalId} deleted by ${user.id}:`, {
+      goal: goal.subject,
+      impact,
+      filesDeleted: filesDeleted || 0
+    })
+
     revalidatePath("/dashboard")
-    return { success: true, data }
+    revalidatePath("/admin/ai-analysis") // Refresh AI analysis page
+    
+    return { 
+      success: true, 
+      data,
+      impact,
+      filesDeleted: filesDeleted || 0,
+      message: `Goal "${goal.subject}" and all related data deleted successfully`
+    }
   } catch (error) {
     console.error("Delete goal error:", error)
     return { error: "Authentication required" }

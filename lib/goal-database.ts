@@ -739,12 +739,123 @@ export async function addGoalComment(goalId: string, comment: string, userId: st
   }
 }
 
+// Get goal deletion impact data
+export async function getGoalDeletionImpact(goalId: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { 
+        data: {
+          tasks: 0,
+          comments: 0,
+          attachments: 0,
+          notifications: 0,
+          assignees: 0,
+          ai_analyses: 0,
+          support_departments: 0
+        }, 
+        error: null 
+      }
+    }
+
+    // Count related records in parallel
+    const [
+      tasksResult,
+      commentsResult,
+      attachmentsResult,
+      notificationsResult,
+      assigneesResult,
+      aiAnalysesResult,
+      supportResult
+    ] = await Promise.all([
+      supabaseAdmin.from("goal_tasks").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("goal_comments").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("goal_attachments").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("notifications").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("goal_assignees").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("goal_ai_analysis").select("id", { count: "exact", head: true }).eq("goal_id", goalId),
+      supabaseAdmin.from("goal_support").select("id", { count: "exact", head: true }).eq("goal_id", goalId)
+    ])
+
+    return {
+      data: {
+        tasks: tasksResult.count || 0,
+        comments: commentsResult.count || 0,
+        attachments: attachmentsResult.count || 0,
+        notifications: notificationsResult.count || 0,
+        assignees: assigneesResult.count || 0,
+        ai_analyses: aiAnalysesResult.count || 0,
+        support_departments: supportResult.count || 0
+      },
+      error: null
+    }
+  } catch (error) {
+    console.error("Get goal deletion impact error:", error)
+    return { data: null, error: error }
+  }
+}
+
+// Delete goal files from Supabase Storage
+export async function deleteGoalFiles(goalId: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { data: [], error: null }
+    }
+
+    // Get all attachment file paths for this goal
+    const { data: attachments, error: fetchError } = await supabaseAdmin
+      .from("goal_attachments")
+      .select("file_path")
+      .eq("goal_id", goalId)
+
+    if (fetchError) {
+      console.error("Error fetching goal attachments:", fetchError)
+      return { data: [], error: fetchError }
+    }
+
+    if (!attachments || attachments.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Delete files from storage
+    const filePaths = attachments.map((att: any) => att.file_path as string)
+    const { data, error } = await supabaseAdmin.storage
+      .from("goal-attachments")
+      .remove(filePaths)
+
+    return { data: data || [], error }
+  } catch (error) {
+    console.error("Delete goal files error:", error)
+    return { data: [], error: error }
+  }
+}
+
 export async function deleteGoal(goalId: string) {
   try {
     if (!supabaseAdmin) {
       return { data: { id: goalId }, error: null }
     }
 
+    // Start a transaction-like operation
+    // First, get goal data for return value
+    const { data: goalData, error: fetchError } = await supabaseAdmin
+      .from("goals")
+      .select("*")
+      .eq("id", goalId)
+      .single()
+
+    if (fetchError) {
+      return { data: null, error: fetchError }
+    }
+
+    // Delete files from storage first (before database cleanup)
+    const fileDeleteResult = await deleteGoalFiles(goalId)
+    if (fileDeleteResult.error) {
+      console.error("File deletion failed:", fileDeleteResult.error)
+      // Continue with database deletion even if file deletion fails
+      // This prevents orphaned database records
+    }
+
+    // Delete the goal (this triggers CASCADE DELETE for all related records)
     const { data, error } = await supabaseAdmin
       .from("goals")
       .delete()
@@ -752,7 +863,16 @@ export async function deleteGoal(goalId: string) {
       .select()
       .single()
 
-    return { data, error }
+    if (error) {
+      console.error("Goal deletion failed:", error)
+      return { data: null, error }
+    }
+
+    return { 
+      data: data || goalData, 
+      error: null,
+      filesDeleted: fileDeleteResult.data?.length || 0
+    }
   } catch (error) {
     console.error("Delete goal error:", error)
     return { data: null, error: error }

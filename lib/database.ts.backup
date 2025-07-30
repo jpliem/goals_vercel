@@ -1,4 +1,5 @@
 import type { Database, AIAnalysisData } from "./supabase";
+import { getTwoWeeksFocusRequestsCompatible, getFocusRequestsRangeCompatible, cleanupOldFocusDataCompatible } from "./database-focus-migration";
 
 // Using shared Supabase client from supabase-client.ts
 import { supabaseAdmin, getSupabaseConnectionStatus } from './supabase-client'
@@ -452,8 +453,9 @@ export async function getRequests(options: {
       });
     }
 
-    // Focus functionality removed - no longer tracking focus requests
-    const focusRequestIds = new Set();
+    // Fetch focus data for all requests
+    const { data: focusData, error: focusError } = await getTwoWeeksFocusRequests();
+    const focusRequestIds = new Set(focusData?.map((f: any) => f.request_id) || []);
 
     // Ensure proper handling of requests with null application_id, add executors, and add focus status
     const processedData =
@@ -3333,22 +3335,107 @@ export async function getEmployeePerformanceMetrics(): Promise<EmployeePerforman
 }
 
 // =============================================================================
+// TWO WEEKS FOCUS TRACKING FUNCTIONS
+// =============================================================================
+
+export async function addTwoWeeksFocus(userId: string, requestId: string, markedBy: string, focusDate?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available for addTwoWeeksFocus')
+      return { success: false, error: 'Database not available' }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('two_weeks_focus_requests')
+      .insert({
+        user_id: userId,
+        request_id: requestId,
+        marked_by: markedBy,
+        focus_date: focusDate || new Date().toISOString().split('T')[0]
+      })
+
+    if (error) {
+      console.error('Error adding two weeks focus:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in addTwoWeeksFocus:', error)
+    return { success: false, error: 'Failed to add two weeks focus' }
+  }
+}
+
+export async function removeTwoWeeksFocus(userId: string, requestId: string, focusDate?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available for removeTwoWeeksFocus')
+      return { success: false, error: 'Database not available' }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('two_weeks_focus_requests')
+      .delete()
+      .match({
+        user_id: userId,
+        request_id: requestId,
+        focus_date: focusDate || new Date().toISOString().split('T')[0]
+      })
+
+    if (error) {
+      console.error('Error removing two weeks focus:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in removeTwoWeeksFocus:', error)
+    return { success: false, error: 'Failed to remove two weeks focus' }
+  }
+}
+
+export async function getTwoWeeksFocusRequests(focusDate?: string): Promise<{ data: any[] | null; error: Error | null }> {
+  try {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available for getTwoWeeksFocusRequests')
+      return { data: [], error: null }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('two_weeks_focus_requests')
+      .select('*')
+      .eq('focus_date', focusDate || new Date().toISOString().split('T')[0])
+
+    if (error) {
+      console.error('Error fetching two weeks focus requests:', error)
+      return { data: null, error }
+    }
+
+    return { data: data || [], error: null }
+  } catch (error) {
+    console.error('Error in getTwoWeeksFocusRequests:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+// =============================================================================
+// ENHANCED FOCUS MANAGEMENT FOR 2-WEEK PLANNING
 // =============================================================================
 
 /**
  * Get focus requests across a date range for management planning
  */
 export async function getFocusRequestsRange(startDate: string, endDate: string): Promise<{ data: any[] | null; error: Error | null }> {
-  // Focus functionality removed - returning empty data
-  return { data: [], error: null }
+  // Use backwards-compatible function during migration period
+  return await getFocusRequestsRangeCompatible(startDate, endDate)
 }
 
 /**
  * Clean up old focus data older than specified days
  */
 export async function cleanupOldFocusData(daysToKeep: number = 30): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
-  // Focus functionality removed - no cleanup needed
-  return { success: true, deletedCount: 0 }
+  // Use backwards-compatible function during migration period
+  return await cleanupOldFocusDataCompatible(daysToKeep)
 }
 
 /**
@@ -3716,6 +3803,7 @@ export async function getPICInvolvementData(focusDate?: string): Promise<PICInvo
     // Step 1: Get all data
     const allRequestsResult = await getAllSystemRequests()
     const allUsersResult = await getUsers()
+    const focusResult = await getTwoWeeksFocusRequestsCompatible(focusDate)
     
     if (!allRequestsResult.data || !allUsersResult.data) {
       console.log('❌ No data found for PIC involvement analysis')
@@ -3724,7 +3812,7 @@ export async function getPICInvolvementData(focusDate?: string): Promise<PICInvo
     
     const requests = allRequestsResult.data
     const allUsers = allUsersResult.data
-    const focusRequests: any[] = [] // Focus functionality removed
+    const focusRequests = focusResult.data || []
     
     // Step 2: Get PIC/Admin users only (exclude Requestors)
     const picUsers = allUsers.filter(u => 

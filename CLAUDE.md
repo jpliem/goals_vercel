@@ -63,12 +63,13 @@ The system implements Plan-Do-Check-Act methodology:
 
 ### Database Setup
 ```bash
-# For new installations:
-1. scripts/complete-database-init.sql  # Main schema with all tables
-2. scripts/seed-test-data.sql         # Optional test data
+# For new installations (recommended):
+1. scripts/simplified-database-init.sql  # Clean schema without unimplemented features
+2. scripts/seed-test-data.sql           # Optional test data
 
-# For existing installations with old support system:
-1. scripts/update-goal-support-schema.sql  # Removes status columns from goal_support
+# Alternative (includes unimplemented workflow features):
+1. scripts/complete-database-init.sql   # Full schema with unused tables
+2. scripts/seed-test-data.sql          # Optional test data
 ```
 
 ### Key Query Patterns

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ImageIcon, 
   X, 
@@ -28,8 +29,10 @@ import {
   MessageSquare,
   Edit,
   HandHeart,
-  Building2
+  Building2,
+  Trash2
 } from "lucide-react"
+import { Markdown } from "@/components/ui/markdown"
 import { 
   Tooltip,
   TooltipContent,
@@ -50,6 +53,7 @@ import { getGoalAttachments, deleteGoalAttachment, uploadMultipleGoalAttachments
 import { FileUpload } from "@/components/ui/file-upload"
 import { GoalWorkflowHistory } from "@/components/goal-workflow-history"
 import { EditGoalModal } from "@/components/modals/edit-goal-modal"
+import { DeleteGoalModal } from "@/components/modals/delete-goal-modal"
 import { GoalTasksCard } from "@/components/goal-tasks-card"
 
 interface GoalDetailsProps {
@@ -64,6 +68,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<GoalAttachment[]>([])
@@ -273,6 +278,12 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
     } catch (error) {
       console.error("Failed to delete attachment:", error)
     }
+  }
+
+  // Handle goal deletion
+  const handleGoalDeleted = () => {
+    // Redirect to dashboard after successful deletion
+    router.push('/dashboard')
   }
 
   // Load initial data
@@ -533,14 +544,25 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                 </TooltipProvider>
                 
                 {canEdit && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditModalOpen(true)}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditModalOpen(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setDeleteModalOpen(true)}
+                      className="text-red-600 hover:text-red-700 hover:border-red-300"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -570,9 +592,12 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                   <CardContent className="space-y-6 p-4">
                     <div>
                       <Label className="text-sm font-medium mb-3 block">Description</Label>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {goal.description || 'No description provided'}
-                      </p>
+                      <div className="text-sm text-gray-700">
+                        <Markdown 
+                          content={goal.description || 'No description provided'} 
+                          variant="compact"
+                        />
+                      </div>
                     </div>
 
                     {goal.target_metrics && (
@@ -638,7 +663,12 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                                           {new Date(comment.created_at).toLocaleString()}
                                         </span>
                                       </div>
-                                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
+                                      <div className="text-sm text-gray-700">
+                                        <Markdown 
+                                          content={comment.comment} 
+                                          variant="compact"
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -664,18 +694,41 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                       <div className="border-t pt-4">
                         <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
                         <div className="space-y-4">
-                          <div className="relative">
-                            <Textarea
-                              placeholder="Share progress updates, challenges, or achievements..."
-                              value={newComment}
-                              onChange={(e) => setNewComment(e.target.value)}
-                              rows={4}
-                              className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                            <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                              {newComment.length}/500
-                            </div>
-                          </div>
+                          <Tabs defaultValue="edit" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                              <TabsTrigger value="edit" className="flex items-center gap-1">
+                                <Edit className="h-3 w-3" />
+                                Write
+                              </TabsTrigger>
+                              <TabsTrigger value="preview" className="flex items-center gap-1">
+                                <Eye className="h-3 w-3" />
+                                Preview
+                              </TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="edit" className="mt-2">
+                              <div className="relative">
+                                <Textarea
+                                  placeholder="Share progress updates, challenges, or achievements... (Markdown supported)"
+                                  value={newComment}
+                                  onChange={(e) => setNewComment(e.target.value)}
+                                  rows={4}
+                                  className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                                  {newComment.length}/500
+                                </div>
+                              </div>
+                            </TabsContent>
+                            <TabsContent value="preview" className="mt-2">
+                              <div className="min-h-[100px] p-3 border rounded-md bg-gray-50">
+                                {newComment ? (
+                                  <Markdown content={newComment} variant="compact" />
+                                ) : (
+                                  <p className="text-gray-500 text-sm italic">Nothing to preview yet...</p>
+                                )}
+                              </div>
+                            </TabsContent>
+                          </Tabs>
                           <div className="flex justify-end">
                             <Button 
                               onClick={handleAddComment}
@@ -766,6 +819,13 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
             onUpdate={() => onDataRefresh?.()}
           />
         )}
+        
+        <DeleteGoalModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          goalId={goal.id}
+          onDeleted={handleGoalDeleted}
+        />
 
       </div>
     </div>

@@ -66,14 +66,10 @@ export default async function SystemConfigPage() {
         <div className="px-4 sm:px-0">
           
           <Tabs defaultValue="departments" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="departments" className="flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
                 Departments
-              </TabsTrigger>
-              <TabsTrigger value="users" className="flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                User Management
               </TabsTrigger>
               <TabsTrigger value="data" className="flex items-center gap-2">
                 <Database className="w-4 h-4" />
@@ -99,70 +95,6 @@ export default async function SystemConfigPage() {
               </Card>
             </TabsContent>
 
-            {/* User Management Tab */}
-            <TabsContent value="users" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="w-5 h-5 text-green-600" />
-                      User Assignment
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Assign users to departments and teams. Manage department permissions for cross-departmental access.
-                    </p>
-                    <Link href="/admin">
-                      <Button className="w-full">
-                        <Users className="w-4 h-4 mr-2" />
-                        Go to User Management
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-purple-600" />
-                      Department Permissions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Grant users access to view and manage goals from multiple departments.
-                    </p>
-                    <Button variant="outline" className="w-full" disabled>
-                      <Shield className="w-4 h-4 mr-2" />
-                      Permission Management
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="w-5 h-5 text-blue-600" />
-                    Bulk Operations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    For bulk user import/export operations, use the Data Management tab.
-                  </p>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">
-                      Switch to the <strong>Data Management</strong> tab above to access user import/export tools.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-
             {/* Data Management Tab */}
             <TabsContent value="data" className="space-y-6">
               <div className="mb-6">
@@ -183,6 +115,7 @@ export default async function SystemConfigPage() {
                 <SimpleDepartmentDataManager />
               </div>
             </TabsContent>
+
           </Tabs>
 
           {/* System Information */}
