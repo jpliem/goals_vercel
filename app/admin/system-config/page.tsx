@@ -156,27 +156,18 @@ export default async function SystemConfigPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Upload className="w-5 h-5 text-blue-600" />
-                    Bulk User Operations
+                    <Database className="w-5 h-5 text-blue-600" />
+                    Bulk Operations
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Button variant="outline" disabled>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import Users (CSV)
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" disabled>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Users (CSV)
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" disabled>
-                      <Users className="w-4 h-4 mr-2" />
-                      Bulk Assignment
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    For bulk user import/export operations, use the Data Management tab.
+                  </p>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Switch to the <strong>Data Management</strong> tab above to access user import/export tools.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
