@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUserProfile } from "@/lib/auth"
-import { getUsers } from "@/lib/goal-database"
+import { getUsers, UserRecord } from "@/lib/goal-database"
 import { getActiveAIConfiguration } from "@/actions/ollama-integration"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
@@ -46,7 +46,7 @@ export default async function AdminSettingsPage() {
 
   // Fetch additional data for embedded components
   const usersResult = await getUsers()
-  const users = usersResult.data || []
+  const users = (usersResult.data || []) as unknown as UserRecord[]
   
   const aiConfigResult = await getActiveAIConfiguration()
   const currentAIConfig = aiConfigResult.data

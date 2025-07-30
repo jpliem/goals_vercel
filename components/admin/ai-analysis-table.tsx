@@ -657,16 +657,16 @@ export function AIAnalysisTable() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleDeleteAnalysis(goal.latest_analysis.id, goal.subject)}
-                          disabled={deletingAnalysis === goal.latest_analysis.id}
+                          onClick={() => goal.latest_analysis && handleDeleteAnalysis(goal.latest_analysis.id, goal.subject)}
+                          disabled={deletingAnalysis === goal.latest_analysis?.id}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          {deletingAnalysis === goal.latest_analysis.id ? (
+                          {deletingAnalysis === goal.latest_analysis?.id ? (
                             <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                           ) : (
                             <Trash2 className="w-4 h-4 mr-1" />
                           )}
-                          {deletingAnalysis === goal.latest_analysis.id ? 'Deleting...' : 'Delete'}
+                          {deletingAnalysis === goal.latest_analysis?.id ? 'Deleting...' : 'Delete'}
                         </Button>
                       </>
                     )}
