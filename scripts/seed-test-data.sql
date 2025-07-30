@@ -7,7 +7,8 @@
 -- =============================================================================
 
 INSERT INTO public.users (id, email, full_name, password, role, department, team, skills, is_active) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'admin@company.com', 'System Administrator', 'admin123', 'Admin', 'IT', 'Infrastructure', ARRAY['System Administration', 'Project Management'], true);
+    ('11111111-1111-1111-1111-111111111111', 'admin@company.com', 'System Administrator', 'admin123', 'Admin', 'IT', 'Infrastructure', ARRAY['System Administration', 'Project Management'], true)
+ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================
 -- INSERT DEPARTMENT-TEAM MAPPINGS
@@ -51,7 +52,8 @@ INSERT INTO public.department_teams (department, team) VALUES
 ('Government Relations', 'Government Relations'),
 
 -- Product Development Department teams
-('Product Development', 'Product Development');
+('Product Development', 'Product Development')
+ON CONFLICT (department, team) DO NOTHING;
 
 
 -- =============================================================================
@@ -66,7 +68,8 @@ INSERT INTO public.department_permissions (user_id, department, created_by) VALU
     ('11111111-1111-1111-1111-111111111111', 'Engineer', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Sales', '11111111-1111-1111-1111-111111111111'),
     ('11111111-1111-1111-1111-111111111111', 'Marketing', '11111111-1111-1111-1111-111111111111'),
-    ('11111111-1111-1111-1111-111111111111', 'Government Relations', '11111111-1111-1111-1111-111111111111');
+    ('11111111-1111-1111-1111-111111111111', 'Government Relations', '11111111-1111-1111-1111-111111111111')
+ON CONFLICT (user_id, department) DO NOTHING;
 
 -- =============================================================================
 -- WORKFLOW ADMIN SEED DATA

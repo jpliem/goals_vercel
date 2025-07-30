@@ -31,6 +31,12 @@ import {
   HandHeart,
   Building2
 } from "lucide-react"
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { GoalWithDetails, UserRecord, GoalAttachment, GoalAssignee } from "@/lib/goal-database"
 import { getGoalAttachmentUrl } from "@/lib/goal-database"
 import { 
@@ -139,6 +145,26 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     return targetDate < today
+  }
+
+  // Check if current phase has incomplete tasks for validation
+  const getCurrentPhaseTaskValidation = () => {
+    if (!goal.tasks || goal.tasks.length === 0) {
+      return { canProgress: true, incompleteTasks: [] }
+    }
+
+    const currentPhaseTasks = goal.tasks.filter(task => 
+      task.pdca_phase === goal.status || 
+      (!task.pdca_phase && goal.status === 'Plan')
+    )
+
+    const incompleteTasks = currentPhaseTasks.filter(task => task.status !== 'completed')
+    const canProgress = incompleteTasks.length === 0
+    
+    return {
+      canProgress: canProgress,
+      incompleteTasks: incompleteTasks
+    }
   }
 
   const handleAddComment = async () => {
@@ -259,6 +285,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
 
   const StatusIcon = getStatusIcon(goal.status)
   const isOverdue = isGoalOverdue(goal)
+  const phaseValidation = getCurrentPhaseTaskValidation()
 
   return (
     <div className="space-y-4">
@@ -300,72 +327,169 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
 
               <div className="flex items-center gap-3">
                 {/* PDCA Progress Controls */}
-                {(canEdit || isAnyAssignee) && goal.status !== "Completed" && goal.status !== "Cancelled" && (
-                  <>
-                    {goal.status === "Plan" && (
-                      <Button 
-                        onClick={() => handleStatusChange("Do")}
-                        disabled={isLoading}
-                        size="sm"
-                        className="bg-purple-600 hover:bg-purple-700 text-white"
-                      >
-                        <Target className="h-4 w-4 mr-2" />
-                        Start Do Phase
-                      </Button>
-                    )}
-                    {goal.status === "Do" && (
-                      <Button 
-                        onClick={() => handleStatusChange("Check")}
-                        disabled={isLoading}
-                        size="sm"
-                        className="bg-orange-600 hover:bg-orange-700 text-white"
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        Begin Check
-                      </Button>
-                    )}
-                    {goal.status === "Check" && (
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={() => handleStatusChange("Act")}
-                          disabled={isLoading}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Take Action
-                        </Button>
-                        <Button 
-                          onClick={() => handleStatusChange("Do")}
-                          disabled={isLoading}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Back to Do
-                        </Button>
-                      </div>
-                    )}
-                    {goal.status === "Act" && (
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={() => handleStatusChange("Completed")}
-                          disabled={isLoading}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Complete Goal
-                        </Button>
-                        <Button 
-                          onClick={() => handleStatusChange("Plan")}
-                          disabled={isLoading}
-                          variant="outline"
-                          size="sm"
-                        >
-                          New PDCA Cycle
-                        </Button>
-                      </div>
-                    )}
+                <TooltipProvider>
+                  {(canEdit || isAnyAssignee) && goal.status !== "Completed" && goal.status !== "Cancelled" && (
+                    <>
+                      {goal.status === "Plan" && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button 
+                                onClick={() => handleStatusChange("Do")}
+                                disabled={isLoading || !phaseValidation.canProgress}
+                                size="sm"
+                                className="bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
+                              >
+                                <Target className="h-4 w-4 mr-2" />
+                                Start Do Phase
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {!phaseValidation.canProgress && (
+                            <TooltipContent>
+                              <div className="max-w-xs">
+                                <div className="font-medium mb-1">Complete all Plan phase tasks first:</div>
+                                <ul className="text-sm space-y-1">
+                                  {phaseValidation.incompleteTasks.slice(0, 3).map((task, idx) => (
+                                    <li key={idx} className="flex items-center gap-1">
+                                      <span className="w-1 h-1 bg-current rounded-full flex-shrink-0" />
+                                      {task.title}
+                                    </li>
+                                  ))}
+                                  {phaseValidation.incompleteTasks.length > 3 && (
+                                    <li className="text-gray-400">...and {phaseValidation.incompleteTasks.length - 3} more</li>
+                                  )}
+                                </ul>
+                              </div>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      )}
+                      {goal.status === "Do" && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button 
+                                onClick={() => handleStatusChange("Check")}
+                                disabled={isLoading || !phaseValidation.canProgress}
+                                size="sm"
+                                className="bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50"
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Begin Check
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          {!phaseValidation.canProgress && (
+                            <TooltipContent>
+                              <div className="max-w-xs">
+                                <div className="font-medium mb-1">Complete all Do phase tasks first:</div>
+                                <ul className="text-sm space-y-1">
+                                  {phaseValidation.incompleteTasks.slice(0, 3).map((task, idx) => (
+                                    <li key={idx} className="flex items-center gap-1">
+                                      <span className="w-1 h-1 bg-current rounded-full flex-shrink-0" />
+                                      {task.title}
+                                    </li>
+                                  ))}
+                                  {phaseValidation.incompleteTasks.length > 3 && (
+                                    <li className="text-gray-400">...and {phaseValidation.incompleteTasks.length - 3} more</li>
+                                  )}
+                                </ul>
+                              </div>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      )}
+                      {goal.status === "Check" && (
+                        <div className="flex gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button 
+                                  onClick={() => handleStatusChange("Act")}
+                                  disabled={isLoading || !phaseValidation.canProgress}
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Take Action
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {!phaseValidation.canProgress && (
+                              <TooltipContent>
+                                <div className="max-w-xs">
+                                  <div className="font-medium mb-1">Complete all Check phase tasks first:</div>
+                                  <ul className="text-sm space-y-1">
+                                    {phaseValidation.incompleteTasks.slice(0, 3).map((task, idx) => (
+                                      <li key={idx} className="flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-current rounded-full flex-shrink-0" />
+                                        {task.title}
+                                      </li>
+                                    ))}
+                                    {phaseValidation.incompleteTasks.length > 3 && (
+                                      <li className="text-gray-400">...and {phaseValidation.incompleteTasks.length - 3} more</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                          <Button 
+                            onClick={() => handleStatusChange("Do")}
+                            disabled={isLoading}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Back to Do
+                          </Button>
+                        </div>
+                      )}
+                      {goal.status === "Act" && (
+                        <div className="flex gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button 
+                                  onClick={() => handleStatusChange("Completed")}
+                                  disabled={isLoading || !phaseValidation.canProgress}
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Complete Goal
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {!phaseValidation.canProgress && (
+                              <TooltipContent>
+                                <div className="max-w-xs">
+                                  <div className="font-medium mb-1">Complete all Act phase tasks first:</div>
+                                  <ul className="text-sm space-y-1">
+                                    {phaseValidation.incompleteTasks.slice(0, 3).map((task, idx) => (
+                                      <li key={idx} className="flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-current rounded-full flex-shrink-0" />
+                                        {task.title}
+                                      </li>
+                                    ))}
+                                    {phaseValidation.incompleteTasks.length > 3 && (
+                                      <li className="text-gray-400">...and {phaseValidation.incompleteTasks.length - 3} more</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                          <Button 
+                            onClick={() => handleStatusChange("Plan")}
+                            disabled={isLoading}
+                            variant="outline"
+                            size="sm"
+                          >
+                            New PDCA Cycle
+                          </Button>
+                        </div>
+                      )}
                     
                     {goal.status !== "On Hold" && (
                       <Button 
@@ -388,9 +512,10 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                       >
                         Resume Goal
                       </Button>
-                    )}
-                  </>
-                )}
+                      )}
+                    </>
+                  )}
+                </TooltipProvider>
                 
                 {canEdit && (
                   <Button
@@ -540,9 +665,9 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
           </TabsContent>
 
           <TabsContent value="communications" className="mt-6">
-            {/* Communications - Comments & Files merged into 2-column layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: Comments & Updates */}
+            {/* Communications - Single column for Comments & Updates */}
+            <div className="max-w-4xl mx-auto">
+              {/* Comments & Updates */}
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold">
@@ -573,7 +698,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                                         {comment.user?.full_name || 'Unknown User'}
                                       </span>
                                       <span className="text-xs text-gray-500">
-                                        {new Date(comment.created_at).toLocaleDateString()}
+                                        {new Date(comment.created_at).toLocaleString()}
                                       </span>
                                     </div>
                                     <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{comment.comment}</p>
@@ -626,84 +751,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Right Column: Files & Attachments */}
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                    <FileText className="h-5 w-5 text-purple-600" />
-                    Files & Attachments
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 p-4">
-                  {canComment && (
-                    <div>
-                      <h4 className="font-medium text-sm mb-3">Upload New Files</h4>
-                      <FileUpload
-                        onFilesSelected={setUploadFiles}
-                        existingFiles={uploadFiles}
-                        disabled={uploadLoading}
-                        showPreview={true}
-                      />
-                      {uploadFiles.length > 0 && (
-                        <Button onClick={handleFileUpload} disabled={uploadLoading} size="sm" className="mt-3">
-                          {uploadLoading ? 'Uploading...' : 'Upload Files'}
-                        </Button>
-                      )}
-                      {uploadError && (
-                        <div className="text-red-500 text-sm mt-2">{uploadError}</div>
-                      )}
-                    </div>
-                  )}
-
-                  {loadingAttachments ? (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="text-sm text-gray-500 mt-2">Loading attachments...</p>
-                    </div>
-                  ) : attachments.length > 0 ? (
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Existing Files</h4>
-                      {attachments.map((attachment) => (
-                        <div key={attachment.id} className="flex items-center justify-between p-2 border rounded">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-gray-400" />
-                            <div>
-                              <p className="font-medium text-sm">{attachment.filename}</p>
-                              <p className="text-xs text-gray-500">
-                                {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : 'Unknown size'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => window.open(getGoalAttachmentUrl(attachment.file_url), '_blank')}
-                            >
-                              View
-                            </Button>
-                            {(canEdit || attachment.uploaded_by === userProfile.id) && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteAttachment(attachment.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-gray-500">
-                      <FileText className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                      <p className="text-sm">No attachments yet</p>
                     </div>
                   )}
                 </CardContent>

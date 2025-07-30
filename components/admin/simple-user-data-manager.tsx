@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
-import { Users, Upload, Download, CheckCircle, AlertCircle } from "lucide-react"
-import { exportUsers, importUsers } from "@/actions/simple-data-management"
+import { Users, Upload, Download, CheckCircle, AlertCircle, FileSpreadsheet } from "lucide-react"
+import { exportUsers, importUsers, generateUserTemplate } from "@/actions/simple-data-management"
 
 interface SimpleUserDataManagerProps {
   className?: string
@@ -15,6 +15,7 @@ interface SimpleUserDataManagerProps {
 export function SimpleUserDataManager({ className = "" }: SimpleUserDataManagerProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -48,6 +49,39 @@ export function SimpleUserDataManager({ className = "" }: SimpleUserDataManagerP
       toast.error('Failed to export users')
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    setIsDownloadingTemplate(true)
+    try {
+      const result = await generateUserTemplate()
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      if (result.success && result.data) {
+        // Create and download file
+        const blob = new Blob([new Uint8Array(result.data as number[])], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = result.filename || 'user-import-template.xlsx'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+
+        toast.success('✅ Template downloaded successfully')
+      }
+    } catch (error) {
+      console.error('Template download error:', error)
+      toast.error('Failed to download template')
+    } finally {
+      setIsDownloadingTemplate(false)
     }
   }
 
@@ -112,24 +146,44 @@ export function SimpleUserDataManager({ className = "" }: SimpleUserDataManagerP
       <CardContent className="space-y-4">
         {/* Export Section */}
         <div className="space-y-2">
-          <Button 
-            className="w-full" 
-            onClick={handleExport}
-            disabled={isExporting || isImporting}
-          >
-            {isExporting ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Exporting...
-              </div>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-2" />
-                Export Users
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-gray-500">Download all users as Excel (.xlsx)</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button 
+              className="w-full" 
+              onClick={handleExport}
+              disabled={isExporting || isImporting || isDownloadingTemplate}
+            >
+              {isExporting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Exporting...
+                </div>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export Data
+                </>
+              )}
+            </Button>
+            <Button 
+              variant="outline"
+              className="w-full" 
+              onClick={handleDownloadTemplate}
+              disabled={isExporting || isImporting || isDownloadingTemplate}
+            >
+              {isDownloadingTemplate ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                  Downloading...
+                </div>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Template
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500">Export existing data or download import template</p>
         </div>
         
         {/* Import Section */}

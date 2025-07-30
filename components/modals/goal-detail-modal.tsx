@@ -171,20 +171,20 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
     }
   }
 
+  // Simple user lookup for fallback when assigned_user is not populated
+  const mockUsers = [
+    { id: '11111111-1111-1111-1111-111111111111', full_name: 'System Administrator', email: 'admin@company.com' },
+    { id: '22222222-2222-2222-2222-222222222222', full_name: 'John Smith', email: 'john.smith@company.com' },
+    { id: '33333333-3333-3333-3333-333333333333', full_name: 'Sarah Johnson', email: 'sarah.johnson@company.com' },
+    { id: '44444444-4444-4444-4444-444444444444', full_name: 'Mike Chen', email: 'mike.chen@company.com' },
+    { id: '55555555-5555-5555-5555-555555555555', full_name: 'Lisa Davis', email: 'lisa.davis@company.com' }
+  ]
+
   // Get all unique task assignees across all phases
   const getAllTaskAssignees = () => {
     if (!localGoal.tasks || localGoal.tasks.length === 0) {
       return []
     }
-
-    // Simple user lookup for fallback when assigned_user is not populated
-    const mockUsers = [
-      { id: '11111111-1111-1111-1111-111111111111', full_name: 'System Administrator', email: 'admin@company.com' },
-      { id: '22222222-2222-2222-2222-222222222222', full_name: 'John Smith', email: 'john.smith@company.com' },
-      { id: '33333333-3333-3333-3333-333333333333', full_name: 'Sarah Johnson', email: 'sarah.johnson@company.com' },
-      { id: '44444444-4444-4444-4444-444444444444', full_name: 'Mike Chen', email: 'mike.chen@company.com' },
-      { id: '55555555-5555-5555-5555-555555555555', full_name: 'Lisa Davis', email: 'lisa.davis@company.com' }
-    ]
 
     const assigneeMap = new Map()
     
@@ -732,12 +732,16 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                                             <p className="text-gray-700">{task.description}</p>
                                           )}
                                           <div className="flex items-center gap-4">
-                                            {task.assigned_user && (
-                                              <div className="flex items-center gap-1">
-                                                <User className="w-3 h-3" />
-                                                <span>PIC: {task.assigned_user.full_name}</span>
-                                              </div>
-                                            )}
+                                            {/* Show PIC with improved fallback logic */}
+                                            <div className="flex items-center gap-1">
+                                              <User className="w-3 h-3" />
+                                              <span>PIC: {
+                                                task.assigned_user?.full_name || 
+                                                (task.assigned_to && users.find(u => u.id === task.assigned_to)?.full_name) ||
+                                                (task.assigned_to && mockUsers.find(u => u.id === task.assigned_to)?.full_name) ||
+                                                (task.assigned_to ? 'Assigned' : 'Unassigned')
+                                              }</span>
+                                            </div>
                                             {task.assigned_by_user && (
                                               <div className="flex items-center gap-1">
                                                 <User className="w-3 h-3 text-gray-400" />
@@ -867,12 +871,16 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                                     <p className="text-gray-700">{task.description}</p>
                                   )}
                                   <div className="flex items-center gap-4">
-                                    {task.assigned_user && (
-                                      <div className="flex items-center gap-1">
-                                        <User className="w-3 h-3" />
-                                        <span>PIC: {task.assigned_user.full_name}</span>
-                                      </div>
-                                    )}
+                                    {/* Show PIC with improved fallback logic */}
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-3 h-3" />
+                                      <span>PIC: {
+                                        task.assigned_user?.full_name || 
+                                        (task.assigned_to && users.find(u => u.id === task.assigned_to)?.full_name) ||
+                                        (task.assigned_to && mockUsers.find(u => u.id === task.assigned_to)?.full_name) ||
+                                        (task.assigned_to ? 'Assigned' : 'Unassigned')
+                                      }</span>
+                                    </div>
                                     {task.assigned_by_user && (
                                       <div className="flex items-center gap-1">
                                         <User className="w-3 h-3 text-gray-400" />
@@ -1007,7 +1015,7 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                                   {comment.user?.full_name || 'Unknown User'}
                                 </span>
                                 <span className="text-xs text-gray-500">
-                                  {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : 'Unknown date'}
+                                  {comment.created_at ? new Date(comment.created_at).toLocaleString() : 'Unknown date'}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-700 mt-1">{comment.comment || 'No content'}</p>

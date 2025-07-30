@@ -83,7 +83,7 @@ export async function importUsers(fileBuffer: ArrayBuffer) {
     }
 
     // Validate required fields
-    const requiredFields = ['email', 'full_name', 'role']
+    const requiredFields = ['email', 'full_name', 'password']
     const firstRow = data[0] as any
     const missingFields = requiredFields.filter(field => !(field in firstRow))
     
@@ -118,8 +118,10 @@ export async function importUsers(fileBuffer: ArrayBuffer) {
     const usersToImport = data.map((row: any) => ({
       email: row.email,
       full_name: row.full_name,
+      password: row.password,
       role: row.role || 'Employee',
       department: row.department || null,
+      team: row.team || null,
       is_active: row.is_active !== false, // Default to true unless explicitly false
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -287,8 +289,8 @@ export async function importGoals(fileBuffer: ArrayBuffer) {
       return { error: 'No data found in file' }
     }
 
-    // Validate required fields
-    const requiredFields = ['subject', 'description', 'status', 'department']
+    // Validate required fields (status removed as we force it to Plan)
+    const requiredFields = ['subject', 'description', 'department']
     const firstRow = data[0] as any
     const missingFields = requiredFields.filter(field => !(field in firstRow))
     
@@ -319,20 +321,22 @@ export async function importGoals(fileBuffer: ArrayBuffer) {
       }
     }
 
-    // Prepare goals for import
+    // Prepare goals for import (force Plan status and 0% progress for fresh start)
     const goalsToImport = data.map((row: any) => ({
       subject: row.subject,
       description: row.description,
-      status: row.status || 'Plan',
+      status: 'Plan', // Always start with Plan status
       priority: row.priority || 'Medium',
       department: row.department,
       goal_type: row.goal_type || 'Team',
+      teams: row.teams ? row.teams.split(',').map(t => t.trim()) : [],
       start_date: row.start_date || null,
       target_date: row.target_date || null,
       target_metrics: row.target_metrics || null,
       success_criteria: row.success_criteria || null,
-      progress_percentage: parseInt(row.progress_percentage) || 0,
-      owner_id: row.owner_id || user.id, // Default to importing user
+      progress_percentage: 0, // Always start with 0% progress
+      owner_id: user.id, // Always set to importing user
+      workflow_history: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }))
@@ -379,6 +383,7 @@ export async function exportDepartments() {
           id: 'mock-1',
           name: 'Sales',
           description: 'Sales Department',
+          teams: 'Inside Sales, Outside Sales, Sales Operations',
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -387,6 +392,7 @@ export async function exportDepartments() {
           id: 'mock-2',
           name: 'Marketing',
           description: 'Marketing Department',
+          teams: 'Digital Marketing, Content Marketing, SEO',
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -408,26 +414,45 @@ export async function exportDepartments() {
       }
     }
 
-    // Get departments from database
-    const { data: departments, error } = await supabaseAdmin
-      .from('departments')
-      .select('*')
-      .order('name', { ascending: true })
+    // Get departments from database (using department_teams table)
+    const { data: departmentTeams, error } = await supabaseAdmin
+      .from('department_teams')
+      .select('department, team, description, is_active, created_at')
+      .order('department', { ascending: true })
 
     if (error) {
       console.error("Database error:", error)
       return { error: 'Failed to fetch departments from database' }
     }
 
+    // Get unique departments with their teams and data
+    const departmentMap = new Map()
+    departmentTeams?.forEach(dt => {
+      if (!departmentMap.has(dt.department)) {
+        departmentMap.set(dt.department, {
+          id: dt.department, // Use department name as ID since no separate table
+          name: dt.department,
+          description: dt.description || '',
+          teams: [],
+          is_active: dt.is_active,
+          created_at: dt.created_at,
+          updated_at: dt.created_at // Use created_at as updated_at fallback
+        })
+      }
+      // Add team to the department's teams array
+      const dept = departmentMap.get(dt.department)
+      if (dt.team && !dept.teams.includes(dt.team)) {
+        dept.teams.push(dt.team)
+      }
+    })
+
+    // Convert teams arrays to comma-separated strings for Excel export
+    departmentMap.forEach(dept => {
+      dept.teams = dept.teams.join(', ')
+    })
+
     // Prepare data for export
-    const exportData = (departments || []).map(dept => ({
-      id: dept.id,
-      name: dept.name,
-      description: dept.description,
-      is_active: dept.is_active,
-      created_at: dept.created_at,
-      updated_at: dept.updated_at
-    }))
+    const exportData = Array.from(departmentMap.values())
 
     // Create Excel workbook
     const wb = XLSX.utils.book_new()
@@ -446,7 +471,7 @@ export async function exportDepartments() {
       success: true,
       data: Array.from(buffer),
       filename: `departments-export-${new Date().toISOString().split('T')[0]}.xlsx`,
-      count: departments?.length || 0
+      count: exportData?.length || 0
     }
   } catch (error) {
     console.error("Export departments error:", error)
@@ -495,32 +520,43 @@ export async function importDepartments(fileBuffer: ArrayBuffer) {
       }
     }
 
-    // Check for existing departments in database by name
+    // Check for existing departments in database by name (using department_teams table)
     const { data: existingDepartments } = await supabaseAdmin
-      .from('departments')
-      .select('name')
-      .in('name', names)
+      .from('department_teams')
+      .select('department')
+      .in('department', names)
 
     if (existingDepartments && existingDepartments.length > 0) {
-      const existingNames = existingDepartments.map(d => d.name)
+      const existingNames = [...new Set(existingDepartments.map(d => d.department))]
       return { 
         error: `Departments already exist in database: ${existingNames.join(', ')}` 
       }
     }
 
-    // Prepare departments for import
-    const departmentsToImport = data.map((row: any) => ({
-      name: row.name,
-      description: row.description || null,
-      is_active: row.is_active !== false, // Default to true unless explicitly false
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }))
+    // Prepare department-team combinations for import
+    const departmentTeamsToImport = []
+    data.forEach((row: any) => {
+      const department = row.name
+      const description = row.description || null
+      const isActive = row.is_active !== false
+      const teams = row.teams ? row.teams.split(',').map(t => t.trim()).filter(Boolean) : ['General']
 
-    // Insert departments into database
-    const { error: insertError, data: insertedDepartments } = await supabaseAdmin
-      .from('departments')
-      .insert(departmentsToImport)
+      // Create a department_teams entry for each team
+      teams.forEach(team => {
+        departmentTeamsToImport.push({
+          department: department,
+          team: team,
+          description: description,
+          is_active: isActive,
+          created_at: new Date().toISOString()
+        })
+      })
+    })
+
+    // Insert department-team combinations into database
+    const { error: insertError, data: insertedDepartmentTeams } = await supabaseAdmin
+      .from('department_teams')
+      .insert(departmentTeamsToImport)
       .select()
 
     if (insertError) {
@@ -528,17 +564,156 @@ export async function importDepartments(fileBuffer: ArrayBuffer) {
       return { error: 'Failed to import departments into database' }
     }
 
+    // Calculate number of unique departments imported
+    const uniqueDepartments = [...new Set(departmentTeamsToImport.map(dt => dt.department))]
+
     revalidatePath('/admin')
     revalidatePath('/admin/system-config')
 
     return {
       success: true,
-      data: insertedDepartments,
-      count: insertedDepartments?.length || 0,
-      message: `Successfully imported ${insertedDepartments?.length || 0} departments`
+      data: insertedDepartmentTeams,
+      count: uniqueDepartments.length,
+      message: `Successfully imported ${uniqueDepartments.length} departments with ${departmentTeamsToImport.length} teams`
     }
   } catch (error) {
     console.error("Import departments error:", error)
     return { error: "Failed to import departments" }
+  }
+}
+
+// Template Generation Functions
+export async function generateUserTemplate() {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: 'Admin access required' }
+    }
+
+    // Create template data with proper field headers and example row
+    const templateData = [
+      {
+        email: 'user@example.com',
+        full_name: 'John Doe',
+        password: 'defaultpassword123',
+        role: 'Employee',
+        department: 'Sales',
+        team: 'Inside Sales',
+        is_active: true
+      }
+    ]
+
+    // Create Excel workbook
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    
+    // Auto-size columns
+    const colWidths = Object.keys(templateData[0]).map(() => ({ wch: 20 }))
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, "User Template")
+    
+    // Generate buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    
+    return {
+      success: true,
+      data: Array.from(buffer),
+      filename: `user-import-template.xlsx`
+    }
+  } catch (error) {
+    console.error("Generate user template error:", error)
+    return { error: "Failed to generate user template" }
+  }
+}
+
+export async function generateGoalTemplate() {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: 'Admin access required' }
+    }
+
+    // Create template data with proper field headers and example row
+    const templateData = [
+      {
+        subject: 'Increase Q4 Sales Revenue',
+        description: 'Focus on increasing sales revenue by 15% through new customer acquisition and upselling to existing clients',
+        goal_type: 'Team',
+        priority: 'High',
+        department: 'Sales',
+        teams: 'Inside Sales,Outside Sales',
+        start_date: '2024-01-01',
+        target_date: '2024-03-31',
+        target_metrics: '15% revenue increase ($500K additional revenue)',
+        success_criteria: 'Achieve $500K additional revenue through 20% new customer acquisition and 10% upselling'
+      }
+    ]
+
+    // Create Excel workbook
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    
+    // Auto-size columns
+    const colWidths = Object.keys(templateData[0]).map(() => ({ wch: 25 }))
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Goal Template")
+    
+    // Generate buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    
+    return {
+      success: true,
+      data: Array.from(buffer),
+      filename: `goal-import-template.xlsx`
+    }
+  } catch (error) {
+    console.error("Generate goal template error:", error)
+    return { error: "Failed to generate goal template" }
+  }
+}
+
+export async function generateDepartmentTemplate() {
+  try {
+    const user = await requireAuth()
+    
+    if (user.role !== 'Admin') {
+      return { error: 'Admin access required' }
+    }
+
+    // Create template data with proper field headers and example row
+    const templateData = [
+      {
+        name: 'Marketing',
+        description: 'Marketing and advertising department',
+        teams: 'Digital Marketing, Content Marketing, SEO',
+        is_active: true
+      }
+    ]
+
+    // Create Excel workbook
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    
+    // Auto-size columns
+    const colWidths = Object.keys(templateData[0]).map(() => ({ wch: 20 }))
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Department Template")
+    
+    // Generate buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    
+    return {
+      success: true,
+      data: Array.from(buffer),
+      filename: `department-import-template.xlsx`
+    }
+  } catch (error) {
+    console.error("Generate department template error:", error)
+    return { error: "Failed to generate department template" }
   }
 }

@@ -31,7 +31,7 @@ import {
   AlertCircle,
   Target
 } from "lucide-react"
-import { createTask, getTasksForGoal, updateTask, deleteTask, getTaskStats } from "@/actions/goal-tasks"
+import { createTask, getTasksForGoal, updateTask, deleteTask, getTaskStats, completeTask } from "@/actions/goal-tasks"
 import type { UserRecord } from "@/lib/goal-database"
 import { TaskEditModal } from "@/components/modals/task-edit-modal"
 import { UnassignedTasksFilter } from "@/components/unassigned-tasks-filter"
@@ -100,6 +100,8 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [filteredTasks, setFilteredTasks] = useState<GoalTask[]>([])
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
+  const [completingTask, setCompletingTask] = useState<GoalTask | null>(null)
+  const [completionNotes, setCompletionNotes] = useState("")
 
   // Create task form state
   const [newTask, setNewTask] = useState({
@@ -255,6 +257,31 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
     }
   }
 
+  const handleCompleteWithNotes = async () => {
+    if (!completingTask) return
+    
+    setActionLoading(completingTask.id)
+    try {
+      const result = await completeTask(completingTask.id, completionNotes.trim() || undefined)
+      
+      if (result.success) {
+        toast.success("Task completed successfully!")
+        setCompletingTask(null)
+        setCompletionNotes("")
+        // Only reload tasks if not already loading
+        if (!loading) {
+          loadTasks()
+        }
+      } else {
+        toast.error("Failed to complete task", { description: result.error })
+      }
+    } catch (error) {
+      toast.error("Failed to complete task")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'Critical': return 'bg-red-100 text-red-800 border-red-200'
@@ -290,6 +317,21 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
 
   const canManageTasks = isOwner || isAssignee || currentUser.role === 'Admin' ||
                         (currentUser.role === 'Head' && goalDepartment === currentUser.department)
+
+  // Check if current user can manage a specific task (either goal-level permissions or task assignee)
+  const canManageTask = (task: GoalTask) => {
+    // Allow task assignee to manage their own task
+    if (task.assigned_to === currentUser.id) return true
+    
+    // Fall back to goal-level permissions
+    return canManageTasks
+  }
+
+  // Check if current user can complete/start a specific task (only the assigned user should complete tasks)
+  const canCompleteTask = (task: GoalTask) => {
+    // Only the task assignee can complete their own task
+    return task.assigned_to === currentUser.id
+  }
 
   // Filter users to only show those from goal department or support departments
   const availableUsers = users.filter(user => {
@@ -411,20 +453,35 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Group tasks by PDCA phase */}
-                {['Plan', 'Do', 'Check', 'Act'].map(phase => {
-                  const phaseTasks = filteredTasks.filter(task => task.pdca_phase === phase)
-                  if (phaseTasks.length === 0) return null
+                {/* Group tasks by PDCA phase - current phase first */}
+                {(() => {
+                  const allPhases = ['Plan', 'Do', 'Check', 'Act']
+                  const currentPhaseIndex = allPhases.indexOf(currentGoalStatus)
+                  
+                  // Reorder to show current phase first, then remaining phases
+                  const orderedPhases = currentPhaseIndex >= 0 
+                    ? [currentGoalStatus, ...allPhases.filter(p => p !== currentGoalStatus)]
+                    : allPhases
+                  
+                  return orderedPhases.map(phase => {
+                    const phaseTasks = filteredTasks.filter(task => task.pdca_phase === phase)
+                    if (phaseTasks.length === 0) return null
+                    
+                    const isCurrentPhase = phase === currentGoalStatus
                   
                   return (
                     <div key={phase} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <h5 className="font-medium text-sm text-gray-800">{phase} Phase</h5>
+                      <div className={`flex items-center gap-2 ${isCurrentPhase ? 'pb-2 border-b-2 border-blue-500' : ''}`}>
+                        <h5 className={`font-medium text-sm ${isCurrentPhase ? 'text-blue-700 font-semibold' : 'text-gray-800'}`}>
+                          {phase} Phase {isCurrentPhase ? '(Current)' : ''}
+                        </h5>
                         <div className={`px-2 py-1 rounded text-xs font-medium ${
-                          phase === 'Plan' ? 'bg-blue-100 text-blue-800' :
-                          phase === 'Do' ? 'bg-purple-100 text-purple-800' :
-                          phase === 'Check' ? 'bg-orange-100 text-orange-800' :
-                          'bg-green-100 text-green-800'
+                          isCurrentPhase 
+                            ? 'bg-blue-200 text-blue-900 border border-blue-300'
+                            : phase === 'Plan' ? 'bg-blue-100 text-blue-800' :
+                              phase === 'Do' ? 'bg-purple-100 text-purple-800' :
+                              phase === 'Check' ? 'bg-orange-100 text-orange-800' :
+                              'bg-green-100 text-green-800'
                         }`}>
                           {phaseTasks.length} task{phaseTasks.length !== 1 ? 's' : ''}
                         </div>
@@ -516,53 +573,59 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                               </div>
                             </div>
 
-                            {canManageTasks && (
-                              <div className="flex items-center gap-2 flex-wrap ml-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="outline" 
-                                  onClick={() => handleEditTask(task)}
-                                  disabled={actionLoading === task.id}
-                                  className="text-xs border-2 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
-                                >
-                                  <Edit className="w-3 h-3 mr-1" />
-                                  Edit
-                                </Button>
+                            {canManageTask(task) && (
+                              <div className="flex flex-col gap-2 ml-2 min-w-[140px]">
+                                {/* Show Edit and Delete buttons only for goal managers, not just task assignees */}
+                                {canManageTasks && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={() => handleEditTask(task)}
+                                      disabled={actionLoading === task.id}
+                                      className="text-xs border-2 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 w-full justify-start"
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" />
+                                      Edit
+                                    </Button>
+                                    
+                                    <Button 
+                                      size="sm" 
+                                      variant="secondary" 
+                                      onClick={() => handleDeleteTask(task.id)}
+                                      disabled={actionLoading === task.id}
+                                      className="text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 transition-all duration-200 w-full justify-start"
+                                    >
+                                      <Trash2 className="w-3 h-3 mr-1" />
+                                      No Longer Needed
+                                    </Button>
+                                  </>
+                                )}
                                 
-                                {task.status === 'pending' && (
+                                {/* Show Start/Complete buttons only for task assignees */}
+                                {canCompleteTask(task) && task.status === 'pending' && (
                                   <Button 
                                     size="sm" 
                                     onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
                                     disabled={actionLoading === task.id}
-                                    className="text-xs bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-sm transition-all duration-200"
+                                    className="text-xs bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-sm transition-all duration-200 w-full justify-start"
                                   >
                                     <Play className="w-3 h-3 mr-1" />
                                     Start
                                   </Button>
                                 )}
                                 
-                                {task.status === 'in_progress' && (
+                                {canCompleteTask(task) && task.status === 'in_progress' && (
                                   <Button 
                                     size="sm" 
-                                    onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                                    onClick={() => setCompletingTask(task)}
                                     disabled={actionLoading === task.id}
-                                    className="text-xs bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-sm transition-all duration-200"
+                                    className="text-xs bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-sm transition-all duration-200 w-full justify-start"
                                   >
                                     <CheckCircle2 className="w-3 h-3 mr-1" />
                                     Complete
                                   </Button>
                                 )}
-                                
-                                <Button 
-                                  size="sm" 
-                                  variant="secondary" 
-                                  onClick={() => handleDeleteTask(task.id)}
-                                  disabled={actionLoading === task.id}
-                                  className="text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 transition-all duration-200"
-                                >
-                                  <Trash2 className="w-3 h-3 mr-1" />
-                                  No Longer Needed
-                                </Button>
                               </div>
                             )}
                           </div>
@@ -570,7 +633,8 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
                       ))}
                     </div>
                   )
-                })}
+                  })
+                })()}
               </div>
             )}
           </div>
@@ -734,6 +798,56 @@ export function GoalTasksCard({ goalId, currentUser, users, isOwner, isAssignee,
         onTaskUpdated={handleTaskUpdated}
         availableUsers={availableUsers}
       />
+
+      {/* Task Completion Dialog */}
+      <Dialog open={!!completingTask} onOpenChange={() => {
+        setCompletingTask(null)
+        setCompletionNotes("")
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete Task</DialogTitle>
+            <DialogDescription>
+              Mark "{completingTask?.title}" as completed. You can optionally add completion notes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Completion Notes (Optional)</Label>
+              <Textarea
+                value={completionNotes}
+                onChange={(e) => setCompletionNotes(e.target.value)}
+                placeholder="Add any notes about how you completed this task..."
+                className="mt-1"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setCompletingTask(null)
+                setCompletionNotes("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCompleteWithNotes}
+              disabled={actionLoading === completingTask?.id}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {actionLoading === completingTask?.id ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              Complete Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

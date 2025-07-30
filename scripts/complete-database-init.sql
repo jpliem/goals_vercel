@@ -32,12 +32,17 @@ DROP VIEW IF EXISTS public.goal_executor_details CASCADE;
 DROP FUNCTION IF EXISTS cleanup_old_focus_data(INTEGER);
 DROP FUNCTION IF EXISTS get_teams_for_department(TEXT);
 DROP FUNCTION IF EXISTS get_department_team_mappings();
-DROP FUNCTION IF EXISTS update_updated_at_column();
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
 DROP FUNCTION IF EXISTS get_goal_task_stats(UUID);
 DROP FUNCTION IF EXISTS get_user_assigned_tasks(UUID, TEXT);
 DROP FUNCTION IF EXISTS get_goal_task_stats_by_phase(UUID, TEXT);
 DROP FUNCTION IF EXISTS are_phase_tasks_completed(UUID, TEXT);
 DROP FUNCTION IF EXISTS get_incomplete_phase_tasks(UUID, TEXT);
+
+-- Drop workflow tables (this will automatically drop their triggers)
+DROP TABLE IF EXISTS public.workflow_rules CASCADE;
+DROP TABLE IF EXISTS public.workflow_configurations CASCADE;
+DROP TABLE IF EXISTS public.audit_logs CASCADE;
 
 -- Drop storage policies
 DROP POLICY IF EXISTS "Allow authenticated users to upload goal attachments" ON storage.objects;
