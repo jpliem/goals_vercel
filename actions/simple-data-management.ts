@@ -329,7 +329,7 @@ export async function importGoals(fileBuffer: ArrayBuffer) {
       priority: row.priority || 'Medium',
       department: row.department,
       goal_type: row.goal_type || 'Team',
-      teams: row.teams ? row.teams.split(',').map(t => t.trim()) : [],
+      teams: row.teams ? row.teams.split(',').map((t: string) => t.trim()) : [],
       start_date: row.start_date || null,
       target_date: row.target_date || null,
       target_metrics: row.target_metrics || null,
@@ -534,15 +534,15 @@ export async function importDepartments(fileBuffer: ArrayBuffer) {
     }
 
     // Prepare department-team combinations for import
-    const departmentTeamsToImport = []
+    const departmentTeamsToImport: any[] = []
     data.forEach((row: any) => {
       const department = row.name
       const description = row.description || null
       const isActive = row.is_active !== false
-      const teams = row.teams ? row.teams.split(',').map(t => t.trim()).filter(Boolean) : ['General']
+      const teams = row.teams ? row.teams.split(',').map((t: string) => t.trim()).filter(Boolean) : ['General']
 
       // Create a department_teams entry for each team
-      teams.forEach(team => {
+      teams.forEach((team: string) => {
         departmentTeamsToImport.push({
           department: department,
           team: team,

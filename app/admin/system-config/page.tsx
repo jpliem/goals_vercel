@@ -2,8 +2,6 @@ import { redirect } from "next/navigation"
 import { getCurrentUserProfile } from "@/lib/auth"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
-import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
-import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
 import { SimpleUserDataManager } from "@/components/admin/simple-user-data-manager"
 import { SimpleGoalDataManager } from "@/components/admin/simple-goal-data-manager"
 import { SimpleDepartmentDataManager } from "@/components/admin/simple-department-data-manager"
@@ -15,14 +13,11 @@ import {
   ArrowLeft, 
   Building2, 
   Users, 
-  Settings, 
   Database,
-  FileText,
   Shield,
   Activity,
   Download,
   Upload,
-  RotateCcw,
   Target
 } from "lucide-react"
 import Link from "next/link"
@@ -79,10 +74,6 @@ export default async function SystemConfigPage() {
               <TabsTrigger value="users" className="flex items-center gap-2">
                 <Users className="w-4 h-4" />
                 User Management
-              </TabsTrigger>
-              <TabsTrigger value="system" className="flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                System Settings
               </TabsTrigger>
               <TabsTrigger value="data" className="flex items-center gap-2">
                 <Database className="w-4 h-4" />
@@ -171,81 +162,6 @@ export default async function SystemConfigPage() {
               </Card>
             </TabsContent>
 
-            {/* System Settings Tab */}
-            <TabsContent value="system" className="space-y-6">
-              {/* Workflow Rules Configuration */}
-              <WorkflowRulesEditor />
-              
-              {/* Status Transitions Management */}
-              <StatusTransitionsEditor />
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings className="w-5 h-5 text-gray-600" />
-                      Application Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Link href="/admin/workflow">
-                      <Button variant="outline" className="w-full justify-start">
-                        <FileText className="w-4 h-4 mr-2" />
-                        View Workflow Documentation
-                      </Button>
-                    </Link>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Settings className="w-4 h-4 mr-2" />
-                      General Configuration
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Shield className="w-4 h-4 mr-2" />
-                      Security Settings
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Email Templates
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Database className="w-5 h-5 text-red-600" />
-                      System Maintenance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                      <p className="text-sm text-red-800">
-                        <strong>Warning:</strong> These operations can affect system data. Use with caution and ensure you have proper backups.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button variant="outline" disabled>
-                        <RotateCcw className="w-4 h-4 mr-2" />
-                        Reset Demo Data
-                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                      </Button>
-                      <Button variant="outline" disabled>
-                        <Database className="w-4 h-4 mr-2" />
-                        Database Cleanup
-                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                      </Button>
-                      <Button variant="outline" disabled>
-                        <Activity className="w-4 h-4 mr-2" />
-                        System Health Check
-                        <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
 
             {/* Data Management Tab */}
             <TabsContent value="data" className="space-y-6">
