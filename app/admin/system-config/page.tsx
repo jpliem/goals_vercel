@@ -4,6 +4,7 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
 import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
 import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
+import { SimpleUserDataManager } from "@/components/admin/simple-user-data-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -255,31 +256,7 @@ export default async function SystemConfigPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* User Export/Import Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="w-5 h-5 text-blue-600" />
-                      Users
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Button className="w-full">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export Users
-                      </Button>
-                      <p className="text-xs text-gray-500">Download all users as CSV/Excel</p>
-                    </div>
-                    
-                    <div className="border-t pt-4 space-y-2">
-                      <Button variant="outline" className="w-full">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Import Users
-                      </Button>
-                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <SimpleUserDataManager />
 
                 {/* Goal Export/Import Card */}
                 <Card>
