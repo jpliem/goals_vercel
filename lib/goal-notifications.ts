@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase-client'
 
-export type NotificationType = 'task_assigned' | 'task_completed' | 'comment' | 'status_change' | 'task_due_soon' | 'task_overdue'
+export type NotificationType = 'task_assigned' | 'task_completed' | 'comment' | 'status_change' | 'task_due_soon' | 'task_overdue' | 'support_requested' | 'department_activity'
 
 interface NotificationData {
   userId: string
@@ -9,6 +9,25 @@ interface NotificationData {
   title: string
   description: string
   actionData?: Record<string, any>
+}
+
+// Helper function to get department heads
+async function getDepartmentHeads(department: string): Promise<string[]> {
+  if (!supabaseAdmin || !department) return []
+  
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('department', department)
+    .eq('role', 'Head')
+    .eq('is_active', true)
+  
+  if (error) {
+    console.error('Error fetching department heads:', error)
+    return []
+  }
+  
+  return data?.map(user => user.id) || []
 }
 
 // Simple notification system for goal management
@@ -36,6 +55,32 @@ export async function createNotificationsForGoalAction(
       goal.assignees.forEach((assignee: any) => {
         if (assignee.user_id && assignee.user_id !== currentUserId) {
           usersToNotify.add(assignee.user_id)
+        }
+      })
+    }
+    
+    // Add support department heads for support-related actions
+    if (workflowEntry.action === 'support_requested' || workflowEntry.action === 'goal_created') {
+      if (goal.support && Array.isArray(goal.support)) {
+        for (const support of goal.support) {
+          if (support.support_type === 'Department' && support.support_name) {
+            const deptHeads = await getDepartmentHeads(support.support_name)
+            deptHeads.forEach(headId => {
+              if (headId !== currentUserId) {
+                usersToNotify.add(headId)
+              }
+            })
+          }
+        }
+      }
+    }
+    
+    // Add department head for department-specific actions
+    if (goal.department && ['goal_created', 'status_changed'].includes(workflowEntry.action)) {
+      const deptHeads = await getDepartmentHeads(goal.department)
+      deptHeads.forEach(headId => {
+        if (headId !== currentUserId && headId !== goal.owner_id) {
+          usersToNotify.add(headId)
         }
       })
     }
@@ -68,6 +113,10 @@ export async function createNotificationsForGoalAction(
       case 'support_status_updated':
         title = 'Support Status Updated'
         description = `Support status updated for goal "${goal.subject}"`
+        break
+      case 'support_requested':
+        title = 'Support Requested'
+        description = `Your department has been requested to support goal "${goal.subject}"`
         break
       default:
         title = 'Goal Update'
@@ -135,6 +184,10 @@ export async function createNotification(
     type = 'task_due_soon'
   } else if (title.includes('Overdue')) {
     type = 'task_overdue'
+  } else if (title.includes('Support Requested')) {
+    type = 'support_requested'
+  } else if (title.includes('Department')) {
+    type = 'department_activity'
   }
   
   const { error } = await supabaseAdmin
@@ -217,4 +270,47 @@ export async function markAllNotificationsAsRead(userId: string) {
   }
 
   return true
+}
+
+// Notify support departments when they're added to a goal
+export async function notifySupportDepartments(
+  goalId: string,
+  goalSubject: string,
+  supportDepartments: string[],
+  requestedBy: string
+) {
+  if (!supabaseAdmin || !supportDepartments.length) {
+    return { success: false, notified: 0 }
+  }
+
+  try {
+    const notificationPromises: Promise<any>[] = []
+    
+    // For each support department, notify the department heads
+    for (const department of supportDepartments) {
+      const deptHeads = await getDepartmentHeads(department)
+      
+      for (const headId of deptHeads) {
+        if (headId !== requestedBy) {
+          notificationPromises.push(
+            createNotification(
+              headId,
+              'Support Requested',
+              `Your department (${department}) has been requested to support goal: "${goalSubject}"`,
+              { goal_id: goalId, department, action: 'support_requested' }
+            )
+          )
+        }
+      }
+    }
+    
+    const results = await Promise.allSettled(notificationPromises)
+    const successful = results.filter(r => r.status === 'fulfilled').length
+    
+    console.log(`✅ Notified ${successful} department heads about support request`)
+    return { success: true, notified: successful }
+  } catch (error) {
+    console.error('Error notifying support departments:', error)
+    return { success: false, notified: 0, error }
+  }
 }

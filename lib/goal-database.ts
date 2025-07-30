@@ -426,6 +426,7 @@ export async function getGoals(options: {
         owner:users!goals_owner_id_fkey(*),
         current_assignee:users!goals_current_assignee_id_fkey(*),
         comments:goal_comments(*, user:users(*)),
+        support:goal_support(*),
         tasks:goal_tasks(*)
       `)
 

@@ -16,6 +16,7 @@ import {
   addTaskWorkflowEntry
 } from "@/lib/goal-database"
 import { createNotification } from "@/lib/goal-notifications"
+import { supabaseAdmin } from "@/lib/supabase-client"
 
 // Create a single task for a goal
 export async function createTask(formData: FormData) {
@@ -101,6 +102,78 @@ export async function createTask(formData: FormData) {
         `You have been assigned a new task: "${title}"`,
         { task_id: result.data?.id, task_title: title, goal_id: goalId }
       )
+      
+      // Also notify department head if assigned user has a department
+      try {
+        const { data: assignedUser } = await supabaseAdmin
+          ?.from('users')
+          .select('department')
+          .eq('id', assignedTo)
+          .single()
+        
+        if (assignedUser?.department) {
+          const { data: deptHeads } = await supabaseAdmin
+            ?.from('users')
+            .select('id')
+            .eq('department', assignedUser.department)
+            .eq('role', 'Head')
+            .neq('id', user.id) // Don't notify the head if they're the one assigning
+          
+          if (deptHeads && deptHeads.length > 0) {
+            for (const head of deptHeads) {
+              await createNotification(
+                head.id,
+                'Department Task Assignment',
+                `A task has been assigned to a member of your department: "${title}"`,
+                { task_id: result.data?.id, task_title: title, goal_id: goalId, assigned_to: assignedTo }
+              )
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error notifying department head:", error)
+        // Don't fail task creation for notification errors
+      }
+    }
+
+    // Notify goal owner and assignees about new task (in addition to the assigned user notification above)
+    try {
+      const goal = goalResult.data
+      const usersToNotify = new Set<string>()
+      
+      // Add goal owner (unless they created the task or are the assigned user)
+      if (goal.owner_id && goal.owner_id !== user.id && goal.owner_id !== assignedTo) {
+        usersToNotify.add(goal.owner_id)
+      }
+      
+      // Add goal assignees (unless they created the task or are the assigned user)
+      if (goal.assignees && Array.isArray(goal.assignees)) {
+        goal.assignees.forEach((assignee: any) => {
+          if (assignee.user_id && assignee.user_id !== user.id && assignee.user_id !== assignedTo) {
+            usersToNotify.add(assignee.user_id)
+          }
+        })
+      }
+      
+      // Send notifications
+      for (const userId of usersToNotify) {
+        await createNotification(
+          userId,
+          'New Task Created',
+          `New task "${title}" has been created in goal "${goal.subject}"`,
+          { 
+            task_id: result.data?.id, 
+            task_title: title, 
+            goal_id: goalId,
+            goal_subject: goal.subject,
+            created_by: user.full_name || user.email,
+            assigned_to: assignedTo
+          }
+        )
+      }
+    } catch (error) {
+      console.error("Error notifying about task creation:", error)
+      // Don't fail task creation for notification errors
     }
 
     // Add workflow entry for task creation
@@ -369,6 +442,61 @@ export async function completeTask(taskId: string, completionNotes?: string) {
 
     if (result.error) {
       return { error: "Failed to complete task. Make sure you are assigned to this task." }
+    }
+
+    // Create task completion notifications
+    if (taskData) {
+      try {
+        const usersToNotify = new Set<string>()
+        
+        // Add goal owner (if different from task completer)
+        if (taskData.goal.owner_id && taskData.goal.owner_id !== user.id) {
+          usersToNotify.add(taskData.goal.owner_id)
+        }
+        
+        // Add task creator (if different from task completer)
+        if (taskData.assigned_by && taskData.assigned_by !== user.id) {
+          usersToNotify.add(taskData.assigned_by)
+        }
+        
+        // Add department head (if different from task completer)
+        if (taskData.goal.department) {
+          try {
+            const { data: deptHeads } = await supabaseAdmin
+              ?.from('users')
+              .select('id')
+              .eq('department', taskData.goal.department)
+              .eq('role', 'Head')
+              .neq('id', user.id)
+            
+            if (deptHeads && deptHeads.length > 0) {
+              deptHeads.forEach(head => usersToNotify.add(head.id))
+            }
+          } catch (error) {
+            console.error("Error fetching department heads for completion notification:", error)
+          }
+        }
+        
+        // Send notifications
+        for (const userId of usersToNotify) {
+          await createNotification(
+            userId,
+            'Task Completed',
+            `Task "${taskData.title}" has been completed in goal "${taskData.goal.subject || 'Unnamed Goal'}"${completionNotes ? ` with notes: ${completionNotes}` : ''}`,
+            { 
+              task_id: taskId, 
+              task_title: taskData.title, 
+              goal_id: taskData.goal.id,
+              goal_subject: taskData.goal.subject,
+              completed_by: user.full_name || user.email,
+              completion_notes: completionNotes
+            }
+          )
+        }
+      } catch (error) {
+        console.error("Error creating task completion notifications:", error)
+        // Don't fail task completion for notification errors
+      }
     }
 
     // Add workflow entry for task completion

@@ -233,12 +233,9 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
         return
       }
 
-      // Form submission successful - open goal in new tab and provide feedback
+      // Form submission successful - open goal in new tab
       if (result?.data?.id) {
-        alert("Goal created successfully! Opening in new tab...")
         window.open(`/dashboard/goals/${result.data.id}`, '_blank')
-      } else {
-        alert("Goal created successfully!")
       }
       onSuccess?.();
     } catch (err) {
@@ -760,7 +757,27 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                               <SelectContent>
                                 <SelectItem value="unassigned">Unassigned</SelectItem>
                                 {users
-                                  .filter(user => !task.department || user.department === task.department)
+                                  .filter(user => {
+                                    // Include users from task department (primary department)
+                                    if (!task.department || user.department === task.department) {
+                                      return true
+                                    }
+                                    // Include users from support departments
+                                    const supportDepartments = formData.support_requirements.map(req => req.department)
+                                    return supportDepartments.includes(user.department || '')
+                                  })
+                                  .sort((a, b) => {
+                                    // Sort by department first, then by name
+                                    const deptA = a.department || 'No Dept'
+                                    const deptB = b.department || 'No Dept'
+                                    if (deptA !== deptB) {
+                                      // Primary department first, then alphabetical
+                                      if (deptA === task.department) return -1
+                                      if (deptB === task.department) return 1
+                                      return deptA.localeCompare(deptB)
+                                    }
+                                    return a.full_name.localeCompare(b.full_name)
+                                  })
                                   .map((user) => (
                                     <SelectItem key={user.id} value={user.id}>
                                       {user.full_name} ({user.department || 'No Dept'})

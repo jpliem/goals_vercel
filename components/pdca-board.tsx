@@ -48,6 +48,8 @@ interface StageData {
   hasOverdue: boolean
   personalCount: number
   personalGoals: GoalWithDetails[]
+  supportingCount: number
+  supportingGoals: GoalWithDetails[]
   color: {
     bg: string
     border: string
@@ -325,13 +327,34 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   }
 
   // Smart sorting function for goals within each stage
-  const sortGoalsByPriority = (goals: GoalWithDetails[], userId: string): GoalWithDetails[] => {
+  const sortGoalsByPriority = (goals: GoalWithDetails[], userProfile: UserRecord): GoalWithDetails[] => {
     return goals.sort((a, b) => {
-      // 1. Personal goals first (my goals)
-      const aIsPersonal = isPersonalGoal(a, userId)
-      const bIsPersonal = isPersonalGoal(b, userId)
-      if (aIsPersonal && !bIsPersonal) return -1
-      if (!aIsPersonal && bIsPersonal) return 1
+      // Role-based sorting for Head users
+      if (userProfile.role === "Head" && userProfile.department) {
+        // Check if goals are personal (owned/assigned)
+        const aIsPersonal = isPersonalGoal(a, userProfile.id)
+        const bIsPersonal = isPersonalGoal(b, userProfile.id)
+        
+        // Check if goals are supporting (department provides support)
+        const aIsSupporting = a.support?.some((s: any) => s.support_name === userProfile.department) || false
+        const bIsSupporting = b.support?.some((s: any) => s.support_name === userProfile.department) || false
+        
+        // Sort order: Personal > Supporting > Others
+        if (aIsPersonal && !bIsPersonal) return -1
+        if (!aIsPersonal && bIsPersonal) return 1
+        
+        // If neither or both are personal, check supporting
+        if (aIsPersonal === bIsPersonal) {
+          if (aIsSupporting && !bIsSupporting) return -1
+          if (!aIsSupporting && bIsSupporting) return 1
+        }
+      } else {
+        // For Admin and Employee roles, keep existing personal-first logic
+        const aIsPersonal = isPersonalGoal(a, userProfile.id)
+        const bIsPersonal = isPersonalGoal(b, userProfile.id)
+        if (aIsPersonal && !bIsPersonal) return -1
+        if (!aIsPersonal && bIsPersonal) return 1
+      }
       
       // 2. On hold goals second
       const aIsOnHold = a.status === "On Hold"
@@ -385,7 +408,7 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   // Calculate stage data using user-relevant goals
   const stageData: StageData[] = stageDefinitions.map(stage => {
     const filteredGoals = userRelevantGoals.filter(goal => goal.status === stage.id)
-    const stageGoals = sortGoalsByPriority(filteredGoals, userProfile.id)
+    const stageGoals = sortGoalsByPriority(filteredGoals, userProfile)
     const count = stageGoals.length
     const overdueCount = stageGoals.filter(isGoalOverdue).length
     const hasOverdue = overdueCount > 0
@@ -393,6 +416,14 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
     // Calculate personal goals (only for users who can see multiple goals)
     const personalGoals = stageGoals.filter(goal => isPersonalGoal(goal, userProfile.id))
     const personalCount = personalGoals.length
+    
+    // Calculate supporting goals (goals where user's department is providing support)
+    const supportingGoals = stageGoals.filter(goal => {
+      if (!goal.support || !userProfile.department) return false
+      // Goal has support from user's department (removed restriction about same department)
+      return goal.support.some((s: any) => s.support_name === userProfile.department)
+    })
+    const supportingCount = supportingGoals.length
     
     // Simplified color system - only 3 states
     let color = {
@@ -439,6 +470,8 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
       hasOverdue,
       personalCount,
       personalGoals,
+      supportingCount,
+      supportingGoals,
       color,
       position: { row: stage.row, col: stage.col }
     }
@@ -456,9 +489,8 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   // Calculate supporting goals (goals where user's department is providing support)
   const supportingGoals = userRelevantGoals.filter(goal => {
     if (!goal.support || !userProfile.department) return false
-    // Goal has support from user's department AND it's not their own department's goal
-    return goal.support.some((s: any) => s.support_name === userProfile.department) && 
-           goal.department !== userProfile.department
+    // Goal has support from user's department (removed restriction about same department)
+    return goal.support.some((s: any) => s.support_name === userProfile.department)
   }).length
   
 
@@ -503,11 +535,19 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
           
           <p className="text-xs text-gray-600 mb-2">{stage.description}</p>
           
-          {shouldShowPersonalBadges(userProfile, userDepartmentPermissions) && stage.personalCount > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              My Goals: {stage.personalCount}
-            </Badge>
-          )}
+          <div className="flex flex-wrap gap-1">
+            {shouldShowPersonalBadges(userProfile, userDepartmentPermissions) && stage.personalCount > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                My Goals: {stage.personalCount}
+              </Badge>
+            )}
+            {stage.supportingCount > 0 && userProfile.role !== "Admin" && (
+              <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 font-medium">
+                <HandHeart className="h-3 w-3 mr-1" />
+                Supporting: {stage.supportingCount}
+              </Badge>
+            )}
+          </div>
         </CardContent>
       </Card>
     )
@@ -759,7 +799,7 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                               <Badge className={`text-xs font-medium ${getPriorityColor(goal.priority)}`}>
                                 {goal.priority}
                               </Badge>
-                              {goal.support && goal.support.length > 0 && (
+                              {goal.support && goal.support.length > 0 && userProfile.role === "Admin" && (
                                 <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 font-medium">
                                   <HandHeart className="h-3 w-3 mr-1" />
                                   {goal.support.length} Support

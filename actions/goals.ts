@@ -180,6 +180,7 @@ export async function createGoal(formData: FormData) {
       try {
         // Parse support requirements array
         const supportReqs = JSON.parse(supportRequirements) as { department: string; teams: string[] }[]
+        const supportDepartments: string[] = []
         
         for (const requirement of supportReqs) {
           // Create support for the department
@@ -189,6 +190,9 @@ export async function createGoal(formData: FormData) {
             support_name: requirement.department,
             requested_by: user.id
           })
+          
+          // Track departments for notification
+          supportDepartments.push(requirement.department)
 
           // Create support for each team within the department
           for (const team of requirement.teams) {
@@ -200,6 +204,12 @@ export async function createGoal(formData: FormData) {
               requested_by: user.id
             })
           }
+        }
+        
+        // Notify support department heads
+        if (supportDepartments.length > 0) {
+          const { notifySupportDepartments } = await import("@/lib/goal-notifications")
+          await notifySupportDepartments(data.id as string, subject, supportDepartments, user.id)
         }
       } catch (error) {
         console.error("Error creating support requests:", error)
