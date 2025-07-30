@@ -105,28 +105,30 @@ export async function createTask(formData: FormData) {
       
       // Also notify department head if assigned user has a department
       try {
-        const { data: assignedUser } = await supabaseAdmin
-          ?.from('users')
-          .select('department')
-          .eq('id', assignedTo)
-          .single()
+        if (supabaseAdmin) {
+          const { data: assignedUser } = await supabaseAdmin
+            .from('users')
+            .select('department')
+            .eq('id', assignedTo)
+            .single()
         
-        if (assignedUser?.department) {
-          const { data: deptHeads } = await supabaseAdmin
-            ?.from('users')
-            .select('id')
-            .eq('department', assignedUser.department)
-            .eq('role', 'Head')
-            .neq('id', user.id) // Don't notify the head if they're the one assigning
-          
-          if (deptHeads && deptHeads.length > 0) {
-            for (const head of deptHeads) {
-              await createNotification(
-                head.id,
-                'Department Task Assignment',
-                `A task has been assigned to a member of your department: "${title}"`,
-                { task_id: result.data?.id, task_title: title, goal_id: goalId, assigned_to: assignedTo }
-              )
+          if (assignedUser?.department) {
+            const { data: deptHeads } = await supabaseAdmin
+              .from('users')
+              .select('id')
+              .eq('department', assignedUser.department)
+              .eq('role', 'Head')
+              .neq('id', user.id) // Don't notify the head if they're the one assigning
+            
+            if (deptHeads && deptHeads.length > 0) {
+              for (const head of deptHeads) {
+                await createNotification(
+                  head.id,
+                  'Department Task Assignment',
+                  `A task has been assigned to a member of your department: "${title}"`,
+                  { task_id: result.data?.id, task_title: title, goal_id: goalId, assigned_to: assignedTo }
+                )
+              }
             }
           }
         }
@@ -460,10 +462,10 @@ export async function completeTask(taskId: string, completionNotes?: string) {
         }
         
         // Add department head (if different from task completer)
-        if (taskData.goal.department) {
+        if (taskData.goal.department && supabaseAdmin) {
           try {
             const { data: deptHeads } = await supabaseAdmin
-              ?.from('users')
+              .from('users')
               .select('id')
               .eq('department', taskData.goal.department)
               .eq('role', 'Head')
