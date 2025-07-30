@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ImageIcon, 
   X, 
@@ -79,7 +78,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
   const [loadingAssignees, setLoadingAssignees] = useState(true)
   const [taskCompletionNotes, setTaskCompletionNotes] = useState("")
   const [recentAttachments, setRecentAttachments] = useState<GoalAttachment[]>([])
-  const [activeTab, setActiveTab] = useState("overview")
   const router = useRouter()
 
   const isOwner = goal.owner_id === userProfile.id
@@ -539,15 +537,8 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
           </Alert>
         )}
 
-        {/* Tab-based Layout */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="communications">Communications</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="mt-6">
+        {/* Main Content Layout */}
+        <div className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column: Goal Information and Assignees */}
               <div className="space-y-6">
@@ -614,21 +605,6 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                 />
               </div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="activity" className="mt-6">
-            {/* Workflow History - Now in its own dedicated tab */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <History className="h-5 w-5 text-gray-600" />
-                  Goal Activity & History
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
-              </CardContent>
-            </Card>
 
             {/* Task Completion for Multi-Assignees */}
             {isMultiAssignee && goal.status !== "Completed" && (
@@ -662,12 +638,23 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
 
-          <TabsContent value="communications" className="mt-6">
-            {/* Communications - Single column for Comments & Updates */}
-            <div className="max-w-4xl mx-auto">
-              {/* Comments & Updates */}
+            {/* Activity & Communications Side-by-Side Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+              {/* Left Column: Activity & History */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <History className="h-5 w-5 text-gray-600" />
+                    Goal Activity & History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <GoalWorkflowHistory workflowHistory={goal.workflow_history || []} />
+                </CardContent>
+              </Card>
+
+              {/* Right Column: Communications */}
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold">
@@ -756,8 +743,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-        </Tabs>
+        </div>
 
         {/* Modals */}
         {editModalOpen && (
