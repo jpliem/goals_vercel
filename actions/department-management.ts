@@ -16,7 +16,84 @@ const supabaseAdmin = createClient(
   }
 )
 
-// Get all departments with their teams
+// Get all departments with their teams (PUBLIC - for registration)
+export async function getPublicDepartmentTeamStructure() {
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      // Return actual database structure for development
+      return {
+        success: true,
+        data: {
+          'HR': ['Recruitment', 'Training & Development'],
+          'IT': ['IoT', 'GSPE'],
+          'Finance': ['Finance', 'Tax'],
+          'Operation': ['Project', 'PPC', 'QC & QA', 'Admin Project', 'Production', 'Workshop'],
+          'Engineer': ['Mechanical Engineering', 'Electrical Engineering', 'Site Engineering', 'Estimator'],
+          'Sales': ['ABB', 'Siemens', 'Rockwell', 'Hitachi'],
+          'Marketing': ['Marketing'],
+          'Government Relations': ['Government Relations'],
+          'Product Development': ['Product Development']
+        }
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("department_teams")
+      .select("department, team, is_active, created_at")
+      .eq("is_active", true)
+      .order("department", { ascending: true })
+      .order("team", { ascending: true })
+
+    if (error) {
+      console.error("Get public department structure error:", error)
+      // Return actual database structure as fallback
+      return {
+        success: true,
+        data: {
+          'HR': ['Recruitment', 'Training & Development'],
+          'IT': ['IoT', 'GSPE'],
+          'Finance': ['Finance', 'Tax'],
+          'Operation': ['Project', 'PPC', 'QC & QA', 'Admin Project', 'Production', 'Workshop'],
+          'Engineer': ['Mechanical Engineering', 'Electrical Engineering', 'Site Engineering', 'Estimator'],
+          'Sales': ['ABB', 'Siemens', 'Rockwell', 'Hitachi'],
+          'Marketing': ['Marketing'],
+          'Government Relations': ['Government Relations'],
+          'Product Development': ['Product Development']
+        }
+      }
+    }
+
+    // Group teams by department
+    const structure: Record<string, string[]> = {}
+    data?.forEach(row => {
+      if (!structure[row.department]) {
+        structure[row.department] = []
+      }
+      structure[row.department].push(row.team)
+    })
+
+    return { success: true, data: structure }
+  } catch (error) {
+    console.error("Get public department structure error:", error)
+    // Return actual database structure as fallback
+    return {
+      success: true,
+      data: {
+        'HR': ['Recruitment', 'Training & Development'],
+        'IT': ['IoT', 'GSPE'],
+        'Finance': ['Finance', 'Tax'],
+        'Operation': ['Project', 'PPC', 'QC & QA', 'Admin Project', 'Production', 'Workshop'],
+        'Engineer': ['Mechanical Engineering', 'Electrical Engineering', 'Site Engineering', 'Estimator'],
+        'Sales': ['ABB', 'Siemens', 'Rockwell', 'Hitachi'],
+        'Marketing': ['Marketing'],
+        'Government Relations': ['Government Relations'],
+        'Product Development': ['Product Development']
+      }
+    }
+  }
+}
+
+// Get all departments with their teams (ADMIN ONLY)
 export async function getDepartmentTeamStructure() {
   try {
     const user = await requireAuth()

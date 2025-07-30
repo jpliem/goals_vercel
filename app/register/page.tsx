@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, UserPlus, ArrowLeft } from "lucide-react"
-import { getDepartmentTeamStructure } from "@/actions/department-management"
+import { getPublicDepartmentTeamStructure } from "@/actions/department-management"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -32,27 +32,39 @@ export default function RegisterPage() {
   useEffect(() => {
     const loadDepartmentStructure = async () => {
       try {
-        const result = await getDepartmentTeamStructure()
+        const result = await getPublicDepartmentTeamStructure()
         if (result.success && result.data) {
           setDepartmentTeams(result.data)
         } else {
-          console.error("Failed to load department structure:", result.error)
-          // Fallback to hardcoded departments if the API fails
-          const fallbackDepts = ["IT", "HR", "Finance", "Operations", "Marketing", "Sales", "Customer Service", "Product Development", "Quality Assurance", "Legal", "Administration"]
-          const fallbackStructure: Record<string, string[]> = {}
-          fallbackDepts.forEach(dept => {
-            fallbackStructure[dept] = ["General"] // Default team
-          })
+          console.error("Failed to load department structure")
+          // Fallback to actual database structure if the API fails
+          const fallbackStructure = {
+            'HR': ['Recruitment', 'Training & Development'],
+            'IT': ['IoT', 'GSPE'],
+            'Finance': ['Finance', 'Tax'],
+            'Operation': ['Project', 'PPC', 'QC & QA', 'Admin Project', 'Production', 'Workshop'],
+            'Engineer': ['Mechanical Engineering', 'Electrical Engineering', 'Site Engineering', 'Estimator'],
+            'Sales': ['ABB', 'Siemens', 'Rockwell', 'Hitachi'],
+            'Marketing': ['Marketing'],
+            'Government Relations': ['Government Relations'],
+            'Product Development': ['Product Development']
+          }
           setDepartmentTeams(fallbackStructure)
         }
       } catch (error) {
         console.error("Error loading department structure:", error)
-        // Same fallback as above
-        const fallbackDepts = ["IT", "HR", "Finance", "Operations", "Marketing", "Sales", "Customer Service", "Product Development", "Quality Assurance", "Legal", "Administration"]
-        const fallbackStructure: Record<string, string[]> = {}
-        fallbackDepts.forEach(dept => {
-          fallbackStructure[dept] = ["General"]
-        })
+        // Same fallback as above - actual database structure
+        const fallbackStructure = {
+          'HR': ['Recruitment', 'Training & Development'],
+          'IT': ['IoT', 'GSPE'],
+          'Finance': ['Finance', 'Tax'],
+          'Operation': ['Project', 'PPC', 'QC & QA', 'Admin Project', 'Production', 'Workshop'],
+          'Engineer': ['Mechanical Engineering', 'Electrical Engineering', 'Site Engineering', 'Estimator'],
+          'Sales': ['ABB', 'Siemens', 'Rockwell', 'Hitachi'],
+          'Marketing': ['Marketing'],
+          'Government Relations': ['Government Relations'],
+          'Product Development': ['Product Development']
+        }
         setDepartmentTeams(fallbackStructure)
       } finally {
         setLoadingDepartments(false)
