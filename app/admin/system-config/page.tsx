@@ -4,12 +4,6 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
 import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
 import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
-import { GoalExportManager } from "@/components/admin/goal-export-manager"
-import { DepartmentExportManager } from "@/components/admin/department-export-manager"
-import { AssignmentExportManager } from "@/components/admin/assignment-export-manager"
-import { GoalImportManager } from "@/components/admin/goal-import-manager"
-import { DepartmentImportManager } from "@/components/admin/department-import-manager"
-import { UserImportManager } from "@/components/admin/user-import-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,7 +19,8 @@ import {
   Activity,
   Download,
   Upload,
-  RotateCcw
+  RotateCcw,
+  Target
 } from "lucide-react"
 import Link from "next/link"
 
@@ -251,69 +246,95 @@ export default async function SystemConfigPage() {
 
             {/* Data Management Tab */}
             <TabsContent value="data" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Export Managers */}
-                <GoalExportManager />
-                <DepartmentExportManager />
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">Export & Import Data</h2>
+                <p className="text-sm text-gray-600">
+                  Export data to CSV/Excel format and reimport with duplicate validation.
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Assignment Export Manager */}
-                <AssignmentExportManager />
-
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* User Export/Import Card */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Download className="w-5 h-5 text-blue-600" />
-                      Additional Exports
+                      <Users className="w-5 h-5 text-blue-600" />
+                      Users
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Button variant="outline" className="w-full justify-start" disabled>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Audit Logs
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Button className="w-full">
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Users
+                      </Button>
+                      <p className="text-xs text-gray-500">Download all users as CSV/Excel</p>
+                    </div>
+                    
+                    <div className="border-t pt-4 space-y-2">
+                      <Button variant="outline" className="w-full">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Users
+                      </Button>
+                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
+                    </div>
                   </CardContent>
                 </Card>
 
-                {/* Goal Import Manager */}
-                <GoalImportManager />
+                {/* Goal Export/Import Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5 text-green-600" />
+                      Goals
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Button className="w-full">
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Goals
+                      </Button>
+                      <p className="text-xs text-gray-500">Download all goals as CSV/Excel</p>
+                    </div>
+                    
+                    <div className="border-t pt-4 space-y-2">
+                      <Button variant="outline" className="w-full">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Goals
+                      </Button>
+                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Department Export/Import Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-purple-600" />
+                      Departments
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Button className="w-full">
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Departments
+                      </Button>
+                      <p className="text-xs text-gray-500">Download department structure as CSV/Excel</p>
+                    </div>
+                    
+                    <div className="border-t pt-4 space-y-2">
+                      <Button variant="outline" className="w-full">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Departments
+                      </Button>
+                      <p className="text-xs text-gray-500">Upload CSV/Excel with duplicate checking</p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Department Import Manager */}
-                <DepartmentImportManager />
-
-                {/* User Import Manager */}
-                <UserImportManager />
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-purple-600" />
-                    Data Integrity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Monitor and maintain data consistency across the system. Check for orphaned records and relationship integrity.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button variant="outline" disabled>
-                      <Activity className="w-4 h-4 mr-2" />
-                      Run Integrity Check
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                    <Button variant="outline" disabled>
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Fix Data Issues
-                      <Badge variant="secondary" className="ml-2">Coming Soon</Badge>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
             </TabsContent>
           </Tabs>
 
