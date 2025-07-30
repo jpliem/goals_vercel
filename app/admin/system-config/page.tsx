@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getCurrentUserProfile } from "@/lib/auth"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DepartmentManagement } from "@/components/department-management"
+// import { DepartmentStructureVisualizer } from "@/components/admin/department-structure-visualizer"
 import { WorkflowRulesEditor } from "@/components/admin/workflow-rules-editor"
 import { StatusTransitionsEditor } from "@/components/admin/status-transitions-editor"
 import { GoalExportManager } from "@/components/admin/goal-export-manager"
@@ -25,7 +26,8 @@ import {
   Activity,
   Download,
   Upload,
-  RotateCcw
+  RotateCcw,
+  BarChart3
 } from "lucide-react"
 import Link from "next/link"
 
@@ -94,20 +96,42 @@ export default async function SystemConfigPage() {
 
             {/* Department Management Tab */}
             <TabsContent value="departments" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                    Department & Team Management
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Create and manage organizational departments and teams. Assign users to appropriate departments and teams.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <DepartmentManagement />
-                </CardContent>
-              </Card>
+              <Tabs defaultValue="management" className="space-y-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="management" className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Department Management
+                  </TabsTrigger>
+                  <TabsTrigger value="visualization" className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Structure Visualization
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="management" className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                        Department & Team Management
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Create and manage organizational departments and teams. Assign users to appropriate departments and teams.
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      <DepartmentManagement />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="visualization" className="space-y-6">
+                  {/* <DepartmentStructureVisualizer /> */}
+                  <div className="p-4 text-center text-gray-500">
+                    Department Structure Visualizer temporarily disabled
+                  </div>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             {/* User Management Tab */}

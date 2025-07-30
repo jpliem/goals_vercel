@@ -123,7 +123,7 @@ export async function createTask(formData: FormData) {
             if (deptHeads && deptHeads.length > 0) {
               for (const head of deptHeads) {
                 await createNotification(
-                  head.id,
+                  head.id as string,
                   'Department Task Assignment',
                   `A task has been assigned to a member of your department: "${title}"`,
                   { task_id: result.data?.id, task_title: title, goal_id: goalId, assigned_to: assignedTo }
@@ -145,14 +145,14 @@ export async function createTask(formData: FormData) {
       
       // Add goal owner (unless they created the task or are the assigned user)
       if (goal.owner_id && goal.owner_id !== user.id && goal.owner_id !== assignedTo) {
-        usersToNotify.add(goal.owner_id)
+        usersToNotify.add(goal.owner_id as string)
       }
       
       // Add goal assignees (unless they created the task or are the assigned user)
       if (goal.assignees && Array.isArray(goal.assignees)) {
         goal.assignees.forEach((assignee: any) => {
           if (assignee.user_id && assignee.user_id !== user.id && assignee.user_id !== assignedTo) {
-            usersToNotify.add(assignee.user_id)
+            usersToNotify.add(assignee.user_id as string)
           }
         })
       }
@@ -453,12 +453,12 @@ export async function completeTask(taskId: string, completionNotes?: string) {
         
         // Add goal owner (if different from task completer)
         if (taskData.goal.owner_id && taskData.goal.owner_id !== user.id) {
-          usersToNotify.add(taskData.goal.owner_id)
+          usersToNotify.add(taskData.goal.owner_id as string)
         }
         
         // Add task creator (if different from task completer)
         if (taskData.assigned_by && taskData.assigned_by !== user.id) {
-          usersToNotify.add(taskData.assigned_by)
+          usersToNotify.add(taskData.assigned_by as string)
         }
         
         // Add department head (if different from task completer)
@@ -472,7 +472,7 @@ export async function completeTask(taskId: string, completionNotes?: string) {
               .neq('id', user.id)
             
             if (deptHeads && deptHeads.length > 0) {
-              deptHeads.forEach(head => usersToNotify.add(head.id))
+              deptHeads.forEach(head => usersToNotify.add(head.id as string))
             }
           } catch (error) {
             console.error("Error fetching department heads for completion notification:", error)

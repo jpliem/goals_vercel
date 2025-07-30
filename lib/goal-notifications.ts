@@ -27,7 +27,7 @@ async function getDepartmentHeads(department: string): Promise<string[]> {
     return []
   }
   
-  return data?.map(user => user.id) || []
+  return data?.map(user => user.id as string) || []
 }
 
 // Simple notification system for goal management
