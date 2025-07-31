@@ -25,23 +25,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const departmentTeamMappingsResult = await getDepartmentTeamMappings()
   const departmentTeamMappings = departmentTeamMappingsResult.data || {}
   
-  // Load goals - for testing, don't filter by department initially
-  console.log('🔍 Dashboard: User session:', { 
-    id: userSession.id, 
-    email: userSession.email, 
-    department: userSession.department 
-  })
-  
+  // Load goals with AI analysis data for PDCA board
   const goalsResult = await getGoals({
-    userId: userSession.id
-    // Temporarily remove department filtering to see all goals
-    // department: userSession.department
-  })
-  
-  console.log('🔍 Dashboard: Goals result:', { 
-    count: goalsResult.data?.length || 0, 
-    error: goalsResult.error,
-    firstGoal: goalsResult.data?.[0]?.subject || 'None'
+    userId: userSession.id,
+    includeAIAnalysis: true
   })
   
   const userProfileRecord = userSessionToRecord(userSession)

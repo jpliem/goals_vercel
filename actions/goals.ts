@@ -16,6 +16,9 @@ import {
   completeAssigneeTask,
   createGoalSupport,
   updateGoalSupport,
+  getGoalSupport,
+  deleteGoalSupport,
+  deleteGoalTeamSupport,
   getUserById,
   createUserFromSession,
   getDepartmentTeamMappings,
@@ -26,7 +29,7 @@ import { uploadToSupabaseStorage } from "@/lib/storage"
 import { uploadGoalAttachment as saveAttachmentToDatabase } from "@/lib/goal-database"
 import { requireAuth } from "@/lib/auth"
 import { createNotificationsForGoalAction, createNotification } from "@/lib/goal-notifications"
-import { supabase as supabaseAdmin } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-client"
 
 // Helper function to check if user has department permissions
 async function hasDepartmentPermission(userId: string, department: string): Promise<boolean> {
@@ -558,7 +561,7 @@ export async function updateGoalDetails(goalId: string, updates: {
   try {
     const user = await requireAuth()
 
-    // Get current goal to check permissions
+    // Get current goal to check permissions and track changes
     const currentGoalResult = await getGoalById(goalId)
     if (!currentGoalResult.data) {
       return { error: "Goal not found" }
@@ -576,29 +579,111 @@ export async function updateGoalDetails(goalId: string, updates: {
       return { error: "You don't have permission to edit this goal" }
     }
 
-    const { data, error } = await dbUpdateGoalDetails(goalId, updates)
+    // Helper function to normalize dates for comparison
+    const normalizeDateForComparison = (dateValue: string | null | undefined): string | null => {
+      if (!dateValue) return null
+      try {
+        // Convert to Date object and back to YYYY-MM-DD format
+        const date = new Date(dateValue)
+        if (isNaN(date.getTime())) return null
+        return date.toISOString().split('T')[0]
+      } catch {
+        return null
+      }
+    }
+
+    // Track what fields are being changed
+    const changes: Array<{field: string, oldValue: any, newValue: any, label: string}> = []
+    
+    if (updates.subject !== undefined && updates.subject !== currentGoal.subject) {
+      changes.push({field: 'subject', oldValue: currentGoal.subject, newValue: updates.subject, label: 'Subject'})
+    }
+    if (updates.description !== undefined && updates.description !== currentGoal.description) {
+      changes.push({field: 'description', oldValue: currentGoal.description, newValue: updates.description, label: 'Description'})
+    }
+    if (updates.priority !== undefined && updates.priority !== currentGoal.priority) {
+      changes.push({field: 'priority', oldValue: currentGoal.priority, newValue: updates.priority, label: 'Priority'})
+    }
+    
+    // Special handling for date fields - normalize before comparison
+    if (updates.target_date !== undefined) {
+      const normalizedNewDate = normalizeDateForComparison(updates.target_date)
+      const normalizedCurrentDate = normalizeDateForComparison(currentGoal.target_date as string | null | undefined)
+      if (normalizedNewDate !== normalizedCurrentDate) {
+        changes.push({field: 'target_date', oldValue: currentGoal.target_date, newValue: updates.target_date, label: 'Target Date'})
+      }
+    }
+    if (updates.adjusted_target_date !== undefined) {
+      const normalizedNewDate = normalizeDateForComparison(updates.adjusted_target_date)
+      const normalizedCurrentDate = normalizeDateForComparison(currentGoal.adjusted_target_date as string | null | undefined)
+      if (normalizedNewDate !== normalizedCurrentDate) {
+        changes.push({field: 'adjusted_target_date', oldValue: currentGoal.adjusted_target_date, newValue: updates.adjusted_target_date, label: 'Adjusted Target Date'})
+      }
+    }
+    if (updates.target_metrics !== undefined && updates.target_metrics !== currentGoal.target_metrics) {
+      changes.push({field: 'target_metrics', oldValue: currentGoal.target_metrics, newValue: updates.target_metrics, label: 'Target Metrics'})
+    }
+    if (updates.success_criteria !== undefined && updates.success_criteria !== currentGoal.success_criteria) {
+      changes.push({field: 'success_criteria', oldValue: currentGoal.success_criteria, newValue: updates.success_criteria, label: 'Success Criteria'})
+    }
+    if (updates.progress_percentage !== undefined && updates.progress_percentage !== currentGoal.progress_percentage) {
+      changes.push({field: 'progress_percentage', oldValue: currentGoal.progress_percentage, newValue: updates.progress_percentage, label: 'Progress Percentage'})
+    }
+
+    // Create workflow entry before updating if there are changes
+    let workflowEntry: any = undefined
+    if (changes.length > 0) {
+      // Create a single workflow entry summarizing all changes
+      let changeDescription = changes.map(change => {
+        if (change.field === 'target_date' || change.field === 'adjusted_target_date') {
+          const oldDate = change.oldValue ? new Date(change.oldValue).toLocaleDateString() : 'None'
+          const newDate = change.newValue ? new Date(change.newValue).toLocaleDateString() : 'None'
+          return `${change.label}: ${oldDate} → ${newDate}`
+        } else if (change.field === 'progress_percentage') {
+          return `${change.label}: ${change.oldValue || 0}% → ${change.newValue}%`
+        } else {
+          const oldVal = change.oldValue || 'None'
+          const newVal = change.newValue || 'None'
+          // Truncate long values for readability
+          const truncateText = (text: string, maxLen: number = 50) => {
+            if (typeof text !== 'string') return String(text)
+            return text.length > maxLen ? text.substring(0, maxLen) + '...' : text
+          }
+          return `${change.label}: ${truncateText(String(oldVal))} → ${truncateText(String(newVal))}`
+        }
+      }).join('; ')
+
+      workflowEntry = {
+        id: `history-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: user.id,
+        user_name: user.full_name || user.email,
+        action: "goal_updated",
+        comment: `Goal details updated: ${changeDescription}`,
+        details: {
+          fields_changed: changes.map(c => c.field),
+          change_count: changes.length
+        }
+      }
+    }
+
+    const { data, error } = await dbUpdateGoalDetails(goalId, updates, workflowEntry)
 
     if (error) {
       console.error("Update goal details error:", error)
       return { error: "Failed to update goal details" }
     }
 
-    // Create workflow history for significant changes
-    if (updates.target_date || updates.adjusted_target_date) {
-      const workflowEntry = {
-        id: `history-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        user_id: user.id,
-        user_name: user.full_name || user.email,
-        action: "target_date_updated",
-        new_target_date: updates.adjusted_target_date || updates.target_date,
-        comment: `Target date updated to ${new Date(updates.adjusted_target_date || updates.target_date!).toLocaleDateString()}`
-      } as any
-
-      // Add to workflow history
-      const updatedGoal = await getGoalById(goalId)
-      if (updatedGoal.data) {
-        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+    // Create notifications for the workflow entry if it was added
+    if (workflowEntry) {
+      try {
+        const updatedGoal = await getGoalById(goalId)
+        if (updatedGoal.data) {
+          await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        }
+      } catch (notificationError) {
+        console.error("Error creating update notifications:", notificationError)
+        // Don't fail the update for notification errors
       }
     }
 
@@ -838,6 +923,345 @@ export async function markGoalAssigneeTaskComplete(goalId: string, userId: strin
   } catch (error) {
     console.error("Mark assignee task complete error:", error)
     throw error
+  }
+}
+
+export async function addGoalSupport(goalId: string, supportRequirements: Array<{ department: string; teams: string[] }>) {
+  try {
+    const user = await requireAuth()
+
+    // Get goal to check permissions
+    const goalResult = await getGoalById(goalId)
+    if (!goalResult.data) {
+      return { error: "Goal not found" }
+    }
+
+    const goal = goalResult.data
+
+    // Check permissions
+    const canEdit = user.role === "Admin" || 
+                   (user.role === "Head" && goal.department === user.department) ||
+                   goal.owner_id === user.id ||
+                   (goal.department && await hasDepartmentPermission(user.id, String(goal.department)))
+
+    if (!canEdit) {
+      return { error: "You don't have permission to edit this goal's support requirements" }
+    }
+
+    const supportDepartments: string[] = []
+    const addedSupport: any[] = []
+
+    for (const requirement of supportRequirements) {
+      // Create support for the department
+      const deptResult = await createGoalSupport({
+        goal_id: goalId,
+        support_type: "Department",
+        support_name: requirement.department,
+        requested_by: user.id
+      })
+      
+      if (!deptResult.error && deptResult.data) {
+        addedSupport.push(deptResult.data)
+        supportDepartments.push(requirement.department)
+      }
+
+      // Create support for each team within the department
+      for (const team of requirement.teams) {
+        const teamResult = await createGoalSupport({
+          goal_id: goalId,
+          support_type: "Team",
+          support_name: team,
+          support_department: requirement.department,
+          requested_by: user.id
+        })
+        
+        if (!teamResult.error && teamResult.data) {
+          addedSupport.push(teamResult.data)
+        }
+      }
+    }
+
+    // Create workflow history entry
+    if (addedSupport.length > 0) {
+      try {
+        const updatedGoal = await getGoalById(goalId)
+        if (updatedGoal.data) {
+          const supportList = supportRequirements.map(req => 
+            req.teams.length > 0 
+              ? `${req.department} (${req.teams.join(', ')})` 
+              : req.department
+          ).join('; ')
+
+          const workflowEntry = {
+            id: `history-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            user_id: user.id,
+            user_name: user.full_name || user.email,
+            action: "support_added",
+            comment: `Added supporting departments: ${supportList}`,
+            details: { support_added: addedSupport.length }
+          } as any
+
+          await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        }
+      } catch (notificationError) {
+        console.error("Error creating support addition notifications:", notificationError)
+      }
+    }
+
+    // Notify support department heads
+    if (supportDepartments.length > 0) {
+      try {
+        const { notifySupportDepartments } = await import("@/lib/goal-notifications")
+        await notifySupportDepartments(goalId, String(goal.subject), supportDepartments, user.id)
+      } catch (error) {
+        console.error("Error notifying support departments:", error)
+      }
+    }
+
+    revalidatePath(`/dashboard/goals/${goalId}`)
+    return { success: true, data: addedSupport }
+  } catch (error) {
+    console.error("Add goal support error:", error)
+    return { error: "Authentication required" }
+  }
+}
+
+export async function removeGoalSupport(goalId: string, supportId: string) {
+  try {
+    const user = await requireAuth()
+
+    // Get goal to check permissions
+    const goalResult = await getGoalById(goalId)
+    if (!goalResult.data) {
+      return { error: "Goal not found" }
+    }
+
+    const goal = goalResult.data
+
+    // Check permissions
+    const canEdit = user.role === "Admin" || 
+                   (user.role === "Head" && goal.department === user.department) ||
+                   goal.owner_id === user.id ||
+                   (goal.department && await hasDepartmentPermission(user.id, String(goal.department)))
+
+    if (!canEdit) {
+      return { error: "You don't have permission to edit this goal's support requirements" }
+    }
+
+    // Get current support to track what's being removed
+    const currentSupport = await getGoalSupport(goalId)
+    const supportToRemove = currentSupport.data?.find(s => s.id === supportId)
+
+    const result = await deleteGoalSupport(supportId)
+
+    if (result.error) {
+      return { error: "Failed to remove support requirement" }
+    }
+
+    // Create workflow history entry
+    if (supportToRemove) {
+      try {
+        const updatedGoal = await getGoalById(goalId)
+        if (updatedGoal.data) {
+          const workflowEntry = {
+            id: `history-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            user_id: user.id,
+            user_name: user.full_name || user.email,
+            action: "support_removed",
+            comment: `Removed supporting ${String(supportToRemove.support_type).toLowerCase()}: ${supportToRemove.support_name}`,
+            details: { support_type: supportToRemove.support_type, support_name: supportToRemove.support_name }
+          } as any
+
+          await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+        }
+      } catch (notificationError) {
+        console.error("Error creating support removal notifications:", notificationError)
+      }
+    }
+
+    revalidatePath(`/dashboard/goals/${goalId}`)
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.error("Remove goal support error:", error)
+    return { error: "Authentication required" }
+  }
+}
+
+export async function removeGoalTeamSupport(goalId: string, department: string, team: string) {
+  try {
+    const user = await requireAuth()
+
+    // Get goal to check permissions
+    const goalResult = await getGoalById(goalId)
+    if (!goalResult.data) {
+      return { error: "Goal not found" }
+    }
+
+    const goal = goalResult.data
+
+    // Check permissions
+    const canEdit = user.role === "Admin" || 
+                   (user.role === "Head" && goal.department === user.department) ||
+                   goal.owner_id === user.id ||
+                   (goal.department && await hasDepartmentPermission(user.id, String(goal.department)))
+
+    if (!canEdit) {
+      return { error: "You don't have permission to edit this goal's support requirements" }
+    }
+
+    const result = await deleteGoalTeamSupport(goalId, department, team)
+
+    if (result.error) {
+      return { error: "Failed to remove team support" }
+    }
+
+    // Create workflow history entry
+    try {
+      const updatedGoal = await getGoalById(goalId)
+      if (updatedGoal.data) {
+        const workflowEntry = {
+          id: `history-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          user_id: user.id,
+          user_name: user.full_name || user.email,
+          action: "support_removed",
+          comment: `Removed supporting team: ${team} from ${department}`,
+          details: { support_type: "Team", support_name: team, department }
+        } as any
+
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+      }
+    } catch (notificationError) {
+      console.error("Error creating team support removal notifications:", notificationError)
+    }
+
+    revalidatePath(`/dashboard/goals/${goalId}`)
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.error("Remove goal team support error:", error)
+    return { error: "Authentication required" }
+  }
+}
+
+export async function getGoalSupportData(goalId: string) {
+  try {
+    const user = await requireAuth()
+
+    const result = await getGoalSupport(goalId)
+    
+    if (result.error) {
+      return { error: "Failed to load support data" }
+    }
+
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.error('getGoalSupportData error:', error)
+    return { error: "Authentication required" }
+  }
+}
+
+export async function getDepartmentTeamMappingsData() {
+  try {
+    const user = await requireAuth()
+
+    const result = await getDepartmentTeamMappings()
+    
+    if (result.error) {
+      return { error: "Failed to load department data" }
+    }
+
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.error('getDepartmentTeamMappingsData error:', error)
+    return { error: "Authentication required" }
+  }
+}
+
+export async function getGoalAIAnalysis(goalId: string) {
+  try {
+    const user = await requireAuth()
+
+    // Validate goalId format
+    if (!goalId || typeof goalId !== 'string') {
+      return { success: false, error: "Invalid goal ID format" }
+    }
+
+    // Check if user has permission to view this goal
+    const goalResult = await getGoalById(goalId)
+    
+    if (!goalResult.data) {
+      return { success: false, error: "Goal not found" }
+    }
+
+    const goal = goalResult.data
+
+    // Check permissions (same logic as other goal operations)
+    const isAdmin = user.role === "Admin"
+    const isHeadOfDepartment = user.role === "Head" && goal.department === user.department
+    const isOwner = goal.owner_id === user.id
+    const isAssignee = Array.isArray(goal.assignees) && goal.assignees.some((assignee: any) => assignee.user_id === user.id)
+    const hasDeptPermission = goal.department ? await hasDepartmentPermission(user.id, String(goal.department)) : false
+    
+    const canView = isAdmin || isHeadOfDepartment || isOwner || isAssignee || hasDeptPermission
+
+    if (!canView) {
+      return { success: false, error: "You don't have permission to view this goal's AI analysis" }
+    }
+
+    // Get AI analysis for this goal
+    if (!supabaseAdmin) {
+      return { success: false, error: "Database not available" }
+    }
+    
+    const { data: analysis, error } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select(`
+        id,
+        analysis_type,
+        analysis_result,
+        created_at,
+        tokens_used,
+        processing_time_ms,
+        confidence_score,
+        ai_config:ai_configurations!goal_ai_analysis_ai_config_id_fkey(
+          name,
+          model_name
+        )
+      `)
+      .eq('goal_id', goalId)
+      .maybeSingle()
+
+    if (error) {
+      console.error("Error fetching goal AI analysis:", error)
+      return { success: false, error: "Failed to fetch AI analysis" }
+    }
+
+    if (!analysis) {
+      return { success: false, error: "No AI analysis found for this goal" }
+    }
+
+    return { 
+      success: true, 
+      data: {
+        goal: {
+          id: goal.id,
+          subject: goal.subject,
+          description: goal.description,
+          status: goal.status,
+          department: goal.department,
+          priority: goal.priority,
+          created_at: goal.created_at,
+          target_date: goal.target_date,
+          owner: goal.owner
+        },
+        analysis
+      }
+    }
+  } catch (error) {
+    console.error('getGoalAIAnalysis error:', error)
+    return { success: false, error: "Authentication required" }
   }
 }
 

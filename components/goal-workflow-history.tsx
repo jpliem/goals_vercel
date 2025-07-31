@@ -10,6 +10,7 @@ interface WorkflowHistoryItem {
   user_name?: string
   created_at?: string
   timestamp?: string
+  comment?: string
   details?: any
 }
 
@@ -122,6 +123,12 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
       case 'target_date_set':
       case 'target_date_updated':
         return 'Target date updated'
+      case 'goal_updated':
+        return 'Goal details updated'
+      case 'support_added':
+        return 'Support departments added'
+      case 'support_removed':
+        return 'Support department removed'
       // New task action types
       case 'task_created':
         const createdTaskTitle = details.task_title ? ` "${details.task_title}"` : ''
@@ -196,9 +203,9 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
                     }
                   })()}
                 </p>
-                {item.details?.comment && (
+                {(item.comment || item.details?.comment) && (
                   <p className="text-sm text-gray-700 mt-2 bg-gray-50 p-2 rounded">
-                    {item.details.comment}
+                    {item.comment || item.details.comment}
                   </p>
                 )}
                 {item.details?.completion_notes && (
@@ -216,6 +223,26 @@ export function GoalWorkflowHistory({ workflowHistory }: GoalWorkflowHistoryProp
                           <span className="font-medium">{key.replace(/_/g, ' ')}:</span> <span className="italic">{String(value) || 'removed'}</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+                {item.action === 'goal_updated' && item.details?.fields_changed && (
+                  <div className="text-sm mt-2 bg-blue-50 border border-blue-200 p-2 rounded">
+                    <strong className="text-blue-800">Fields updated:</strong>
+                    <div className="text-gray-700 mt-1">
+                      <span className="text-xs">{item.details.fields_changed.map((field: string) => {
+                        const fieldLabels: Record<string, string> = {
+                          'subject': 'Title',
+                          'description': 'Description', 
+                          'priority': 'Priority',
+                          'target_date': 'Target Date',
+                          'adjusted_target_date': 'Adjusted Target Date',
+                          'target_metrics': 'Target Metrics',
+                          'success_criteria': 'Success Criteria',
+                          'progress_percentage': 'Progress'
+                        }
+                        return fieldLabels[field] || field
+                      }).join(', ')}</span>
                     </div>
                   </div>
                 )}

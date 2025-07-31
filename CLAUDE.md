@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: Next.js 15 with App Router, React 19, TypeScript
 - **UI**: shadcn/ui components, Tailwind CSS
 - **Database**: Supabase (PostgreSQL) with RLS policies
-- **Authentication**: Supabase Auth with role-based permissions (Admin, Head, Employee)
+- **Authentication**: Cookie-based session management with role-based permissions (Admin, Head, Employee)
 
 ### Key Architecture Patterns
 

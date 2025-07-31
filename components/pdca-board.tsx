@@ -23,11 +23,14 @@ import {
   UserCheck,
   Pause,
   Building,
-  HandHeart
+  HandHeart,
+  Bot
 } from "lucide-react"
 import { FocusIndicator } from "@/components/ui/focus-indicator"
 import { GoalDetailModal } from "@/components/modals/goal-detail-modal"
+import { GoalAIAnalysisModal } from "@/components/modals/goal-ai-analysis-modal"
 import type { GoalWithDetails, UserRecord } from "@/lib/goal-database"
+import { getGoalAIAnalysis } from "@/actions/goals"
 
 interface PDCABoardProps {
   goals: GoalWithDetails[]
@@ -172,6 +175,9 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   const [viewMode, setViewMode] = useState<string>("all") // For non-admin users
   const [selectedGoal, setSelectedGoal] = useState<GoalWithDetails | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isAIAnalysisModalOpen, setIsAIAnalysisModalOpen] = useState(false)
+  const [aiAnalysisData, setAIAnalysisData] = useState<any>(null)
+  const [loadingAIAnalysis, setLoadingAIAnalysis] = useState(false)
   const router = useRouter()
   
 
@@ -222,6 +228,40 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
   const handleModalClose = () => {
     setIsModalOpen(false)
     setSelectedGoal(null)
+  }
+
+  // AI Analysis modal handlers
+  const handleViewAIAnalysis = async (goal: GoalWithDetails, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setLoadingAIAnalysis(true)
+    
+    try {
+      const result = await getGoalAIAnalysis(goal.id)
+      
+      if (result.success && result.data) {
+        setAIAnalysisData(result.data)
+        setIsAIAnalysisModalOpen(true)
+      } else {
+        // Handle different error cases
+        if (result.error === "No AI analysis found for this goal") {
+          console.log('No AI analysis available for this goal')
+          // Note: This shouldn't happen if button visibility logic is correct
+        } else if (result.error === "You don't have permission to view this goal's AI analysis") {
+          console.error('Permission denied for AI analysis access')
+        } else {
+          console.error('Failed to load AI analysis:', result.error)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading AI analysis:', error)
+    } finally {
+      setLoadingAIAnalysis(false)
+    }
+  }
+
+  const handleAIAnalysisModalClose = () => {
+    setIsAIAnalysisModalOpen(false)
+    setAIAnalysisData(null)
   }
 
   const handleRefresh = () => {
@@ -745,6 +785,25 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                                 </h4>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* AI Analysis Button - Show when analysis exists and has required data */}
+                                {goal.ai_analysis && goal.ai_analysis.id && goal.ai_analysis.analysis_result && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-6 px-2 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                                    onClick={(e) => handleViewAIAnalysis(goal, e)}
+                                    disabled={loadingAIAnalysis}
+                                  >
+                                    {loadingAIAnalysis ? (
+                                      "Loading..."
+                                    ) : (
+                                      <>
+                                        <Bot className="h-3 w-3 mr-1" />
+                                        AI Analysis
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -963,6 +1022,12 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
         onClose={handleModalClose}
         onRefresh={handleRefresh}
         users={users}
+      />
+      
+      <GoalAIAnalysisModal
+        isOpen={isAIAnalysisModalOpen}
+        onClose={handleAIAnalysisModalClose}
+        goalData={aiAnalysisData}
       />
     </div>
   )

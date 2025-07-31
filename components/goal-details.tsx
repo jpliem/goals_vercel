@@ -11,14 +11,13 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ImageIcon, 
   X, 
   History, 
   Target, 
   Clock, 
-  Eye, 
+  Eye,
   TrendingUp, 
   CheckCircle, 
   User, 
@@ -694,41 +693,18 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                       <div className="border-t pt-4">
                         <h4 className="font-medium text-sm mb-4">Add Progress Update</h4>
                         <div className="space-y-4">
-                          <Tabs defaultValue="edit" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                              <TabsTrigger value="edit" className="flex items-center gap-1">
-                                <Edit className="h-3 w-3" />
-                                Write
-                              </TabsTrigger>
-                              <TabsTrigger value="preview" className="flex items-center gap-1">
-                                <Eye className="h-3 w-3" />
-                                Preview
-                              </TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="edit" className="mt-2">
-                              <div className="relative">
-                                <Textarea
-                                  placeholder="Share progress updates, challenges, or achievements... (Markdown supported)"
-                                  value={newComment}
-                                  onChange={(e) => setNewComment(e.target.value)}
-                                  rows={4}
-                                  className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                                  {newComment.length}/500
-                                </div>
-                              </div>
-                            </TabsContent>
-                            <TabsContent value="preview" className="mt-2">
-                              <div className="min-h-[100px] p-3 border rounded-md bg-gray-50">
-                                {newComment ? (
-                                  <Markdown content={newComment} variant="compact" />
-                                ) : (
-                                  <p className="text-gray-500 text-sm italic">Nothing to preview yet...</p>
-                                )}
-                              </div>
-                            </TabsContent>
-                          </Tabs>
+                          <div className="relative">
+                            <Textarea
+                              placeholder="Share progress updates, challenges, or achievements..."
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              rows={4}
+                              className="resize-none text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                              {newComment.length}/500
+                            </div>
+                          </div>
                           <div className="flex justify-end">
                             <Button 
                               onClick={handleAddComment}

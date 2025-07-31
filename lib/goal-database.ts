@@ -123,6 +123,21 @@ export interface GoalSupport {
 
 // Using shared Supabase client from supabase-client.ts
 
+// AI Analysis interface
+export interface GoalAIAnalysis {
+  id: string
+  analysis_type: string
+  analysis_result: string
+  created_at: string
+  tokens_used?: number
+  processing_time_ms?: number
+  confidence_score?: number
+  ai_config?: {
+    name: string
+    model_name: string
+  }
+}
+
 // Extended goal interface with related data
 export interface GoalWithDetails extends Goal {
   owner: UserRecord | null
@@ -139,6 +154,7 @@ export interface GoalWithDetails extends Goal {
     in_progress_tasks: number
     completion_percentage: number
   }
+  ai_analysis?: GoalAIAnalysis | null
   isFocused?: boolean
 }
 
@@ -400,6 +416,7 @@ export async function getGoals(options: {
   goal_type?: string
   limit?: number
   offset?: number
+  includeAIAnalysis?: boolean
 } = {}) {
   try {
     if (!supabaseAdmin) {
@@ -419,16 +436,38 @@ export async function getGoals(options: {
       return { data: filteredGoals, error: null }
     }
 
+    // Build select query based on options
+    let selectQuery = `
+      *,
+      owner:users!goals_owner_id_fkey(*),
+      current_assignee:users!goals_current_assignee_id_fkey(*),
+      comments:goal_comments(*, user:users(*)),
+      support:goal_support(*),
+      tasks:goal_tasks(*)
+    `
+    
+    // Conditionally include AI analysis
+    if (options.includeAIAnalysis) {
+      selectQuery += `,
+        ai_analysis:goal_ai_analysis(
+          id,
+          analysis_type,
+          analysis_result,
+          created_at,
+          tokens_used,
+          processing_time_ms,
+          confidence_score,
+          ai_config:ai_configurations!goal_ai_analysis_ai_config_id_fkey(
+            name,
+            model_name
+          )
+        )
+      `
+    }
+
     let query = supabaseAdmin
       .from("goals")
-      .select(`
-        *,
-        owner:users!goals_owner_id_fkey(*),
-        current_assignee:users!goals_current_assignee_id_fkey(*),
-        comments:goal_comments(*, user:users(*)),
-        support:goal_support(*),
-        tasks:goal_tasks(*)
-      `)
+      .select(selectQuery)
 
     if (options.department) {
       query = query.eq("department", options.department)
@@ -452,7 +491,7 @@ export async function getGoals(options: {
 
     // Get assignees for each goal separately (to avoid complex joins)
     if (data && data.length > 0) {
-      const goalIds = data.map(g => g.id)
+      const goalIds = data.map((g: any) => g.id)
       const { data: assigneesData } = await supabaseAdmin
         .from("goal_assignees")
         .select("*, users!goal_assignees_user_id_fkey(*)")
@@ -489,6 +528,13 @@ export async function getGoals(options: {
             pending_tasks: 0,
             in_progress_tasks: 0,
             completion_percentage: 0
+          }
+        }
+
+        // Normalize AI analysis data (Supabase returns array, we want single object or null)
+        if (options.includeAIAnalysis && goal.ai_analysis) {
+          if (Array.isArray(goal.ai_analysis)) {
+            goal.ai_analysis = goal.ai_analysis.length > 0 ? goal.ai_analysis[0] : null
           }
         }
       })
@@ -696,15 +742,31 @@ export async function updateGoalDetails(goalId: string, updates: {
   target_metrics?: string
   success_criteria?: string
   progress_percentage?: number
-}) {
+}, workflowEntry?: any) {
   try {
     if (!supabaseAdmin) {
       return { data: { id: goalId }, error: null }
     }
 
+    const updateData: any = { 
+      ...updates, 
+      updated_at: new Date().toISOString() 
+    }
+    
+    if (workflowEntry) {
+      // Get current workflow history and append new entry
+      const { data: currentGoal } = await supabaseAdmin
+        .from("goals")
+        .select("workflow_history")
+        .eq("id", goalId)
+        .single()
+      const currentHistory = Array.isArray(currentGoal?.workflow_history) ? currentGoal.workflow_history : []
+      updateData.workflow_history = [...currentHistory, workflowEntry]
+    }
+
     const { data, error } = await supabaseAdmin
       .from("goals")
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq("id", goalId)
       .select()
       .single()
@@ -1652,6 +1714,62 @@ export async function createBulkGoalTasks(goalId: string, tasks: Array<{
     return { data, error }
   } catch (error) {
     console.error("Create bulk goal tasks error:", error)
+    return { data: null, error: error }
+  }
+}
+
+export async function getGoalSupport(goalId: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { data: [], error: null }
+    }
+    const { data, error } = await supabaseAdmin
+      .from("goal_support")
+      .select("*")
+      .eq("goal_id", goalId)
+      .order("created_at", { ascending: true })
+    return { data: data || [], error }
+  } catch (error) {
+    console.error("Get goal support error:", error)
+    return { data: [], error }
+  }
+}
+
+export async function deleteGoalSupport(supportId: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { data: { id: supportId }, error: null }
+    }
+    const { data, error } = await supabaseAdmin
+      .from("goal_support")
+      .delete()
+      .eq("id", supportId)
+      .select()
+      .single()
+    return { data, error }
+  } catch (error) {
+    console.error("Delete goal support error:", error)
+    return { data: null, error: error }
+  }
+}
+
+export async function deleteGoalTeamSupport(goalId: string, department: string, team: string) {
+  try {
+    if (!supabaseAdmin) {
+      return { data: { id: `team-support-${Date.now()}` }, error: null }
+    }
+    const { data, error } = await supabaseAdmin
+      .from("goal_support")
+      .delete()
+      .eq("goal_id", goalId)
+      .eq("support_type", "Team")
+      .eq("support_name", team)
+      .eq("support_department", department)
+      .select()
+      .single()
+    return { data, error }
+  } catch (error) {
+    console.error("Delete goal team support error:", error)
     return { data: null, error: error }
   }
 }
