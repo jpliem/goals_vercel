@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { parseComment, buildCommentThreads } from "@/lib/comment-utils"
+import { Markdown } from "@/components/ui/markdown"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -62,6 +64,8 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
   const [newComment, setNewComment] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
   const [taskUpdateLoading, setTaskUpdateLoading] = useState<string | null>(null)
   const [renderKey, setRenderKey] = useState(0)
@@ -239,24 +243,28 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
     }
   }, [isOpen, goal?.id])
 
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !localGoal) return
+  const handleAddComment = async (parentId?: string) => {
+    const commentText = parentId ? replyText : newComment
+    if (!commentText.trim() || !localGoal) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      const result = await addGoalComment(localGoal.id, newComment.trim())
+      const result = await addGoalComment(localGoal.id, commentText.trim(), parentId)
       
       if (result.error) {
         setError(result.error as string)
       } else {
         // Add comment locally for immediate display
+        const { formatCommentForStorage } = await import('@/lib/comment-utils')
+        const formattedComment = formatCommentForStorage(commentText.trim(), parentId)
+        
         const newLocalComment = {
           id: `local-${Date.now()}`,
           goal_id: localGoal.id,
           user_id: userProfile.id,
-          comment: newComment.trim(),
+          comment: formattedComment,
           created_at: new Date().toISOString(),
           user: {
             full_name: userProfile.full_name,
@@ -264,7 +272,14 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
           }
         }
         setLocalComments(prev => [...prev, newLocalComment])
-        setNewComment("")
+        
+        // Clear the appropriate input field
+        if (parentId) {
+          setReplyText("")
+          setReplyingTo(null)
+        } else {
+          setNewComment("")
+        }
         // Refresh local goal data and notify parent
         await refreshLocalGoal()
         onRefresh?.()
@@ -471,22 +486,30 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                 <CardContent className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-gray-700">Description</label>
-                    <p className="text-gray-700 leading-relaxed mt-1">
-                      {localGoal.description || 'No description provided'}
-                    </p>
+                    <div className="text-gray-700 leading-relaxed mt-1">
+                      {localGoal.description ? (
+                        <Markdown content={localGoal.description} variant="compact" />
+                      ) : (
+                        <p className="text-gray-500 italic">No description provided</p>
+                      )}
+                    </div>
                   </div>
 
                   {localGoal.target_metrics && (
                     <div>
                       <label className="text-sm font-medium text-gray-700">Target Metrics</label>
-                      <p className="text-gray-700 leading-relaxed mt-1">{localGoal.target_metrics}</p>
+                      <div className="text-gray-700 leading-relaxed mt-1">
+                        <Markdown content={localGoal.target_metrics} variant="compact" />
+                      </div>
                     </div>
                   )}
 
                   {localGoal.success_criteria && (
                     <div>
                       <label className="text-sm font-medium text-gray-700">Success Criteria</label>
-                      <p className="text-gray-700 leading-relaxed mt-1">{localGoal.success_criteria}</p>
+                      <div className="text-gray-700 leading-relaxed mt-1">
+                        <Markdown content={localGoal.success_criteria} variant="compact" />
+                      </div>
                     </div>
                   )}
 
@@ -1000,30 +1023,112 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Recent Comments */}
+                {/* Threaded Comments */}
                 <div className="max-h-64 overflow-y-auto">
                   {displayComments && displayComments.length > 0 ? (
                     <div className="space-y-3">
-                      {displayComments.slice(-5).reverse().map((comment: any, index: number) => (
-                        <div key={comment.id || `comment-${index}`} className="border-l-4 border-blue-200 pl-3 py-2 bg-gray-50 rounded-r">
-                          <div className="flex items-start gap-2">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-medium text-blue-700">
-                                {(comment.user?.full_name || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                              </span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm text-gray-900">
-                                  {comment.user?.full_name || 'Unknown User'}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {comment.created_at ? new Date(comment.created_at).toLocaleString() : 'Unknown date'}
+                      {buildCommentThreads(displayComments).map((comment: any) => (
+                        <div key={comment.id} className="space-y-2">
+                          {/* Top-level comment */}
+                          <div className="border-l-4 border-blue-200 pl-3 py-2 bg-gray-50 rounded-r">
+                            <div className="flex items-start gap-2">
+                              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                <span className="text-xs font-medium text-blue-700">
+                                  {(comment.user?.full_name || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-700 mt-1">{comment.comment || 'No content'}</p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium text-sm text-gray-900">
+                                    {comment.user?.full_name || 'Unknown User'}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {comment.created_at ? new Date(comment.created_at).toLocaleString() : 'Unknown date'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-700 mt-1">{comment.text || 'No content'}</p>
+                                
+                                {/* Reply button */}
+                                {canComment && (
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                                      className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
+                                    >
+                                      {replyingTo === comment.id ? 'Cancel' : 'Reply'} 
+                                      {comment.replyCount && comment.replyCount > 0 && (
+                                        <span className="ml-1">({comment.replyCount})</span>
+                                      )}
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {/* Inline reply form */}
+                                {replyingTo === comment.id && (
+                                  <div className="mt-3 space-y-2">
+                                    <Textarea
+                                      placeholder="Write a reply..."
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setReplyingTo(null)
+                                          setReplyText("")
+                                        }}
+                                        className="h-7 px-2 text-xs"
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleAddComment(comment.id)}
+                                        disabled={isLoading || !replyText.trim()}
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                      >
+                                        {isLoading ? 'Replying...' : 'Reply'}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          
+                          {/* Replies */}
+                          {comment.replies && comment.replies.length > 0 && (
+                            <div className="ml-6 space-y-2">
+                              {comment.replies.map((reply: any) => (
+                                <div key={reply.id} className="border-l-2 border-gray-300 pl-3 py-2 bg-gray-25 rounded-r">
+                                  <div className="flex items-start gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-xs font-medium text-gray-600">
+                                        {(reply.user?.full_name || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                      </span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium text-xs text-gray-800">
+                                          ↳ {reply.user?.full_name || 'Unknown User'}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {reply.created_at ? new Date(reply.created_at).toLocaleString() : 'Unknown date'}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-600 mt-1">{reply.text || 'No content'}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1048,7 +1153,7 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
                       />
                       <div className="flex justify-end">
                         <Button 
-                          onClick={handleAddComment}
+                          onClick={() => handleAddComment()}
                           disabled={isLoading || !newComment.trim()}
                           size="sm"
                         >

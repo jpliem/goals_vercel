@@ -227,6 +227,36 @@ const mockGoals: GoalWithDetails[] = [
         }
       },
       {
+        id: 'comment-reply-001',
+        goal_id: '650e8400-e29b-41d4-a716-446655440001',
+        user_id: '550e8400-e29b-41d4-a716-446655440001',
+        comment: '↳ comment-001: Great progress! What\'s the expected timeline for full implementation?',
+        is_private: false,
+        created_at: new Date(Date.now() - 1.8 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1.8 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440001',
+          full_name: 'System Administrator',
+          email: 'admin@company.com',
+          role: 'Admin'
+        }
+      },
+      {
+        id: 'comment-reply-002',
+        goal_id: '650e8400-e29b-41d4-a716-446655440001',
+        user_id: '550e8400-e29b-41d4-a716-446655440002',
+        comment: '↳ comment-001: We should have it completed by next Friday. Testing is going well so far.',
+        is_private: false,
+        created_at: new Date(Date.now() - 1.5 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1.5 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          full_name: 'Department Manager',
+          email: 'manager@company.com',
+          role: 'Employee'
+        }
+      },
+      {
         id: 'comment-002',
         goal_id: '650e8400-e29b-41d4-a716-446655440001',
         user_id: '550e8400-e29b-41d4-a716-446655440002',
@@ -239,6 +269,21 @@ const mockGoals: GoalWithDetails[] = [
           full_name: 'Department Manager',
           email: 'manager@company.com',
           role: 'Employee'
+        }
+      },
+      {
+        id: 'comment-reply-003',
+        goal_id: '650e8400-e29b-41d4-a716-446655440001',
+        user_id: '550e8400-e29b-41d4-a716-446655440003',
+        comment: '↳ comment-002: Excellent work! Should we prepare a case study on this improvement?',
+        is_private: false,
+        created_at: new Date(Date.now() - 0.5 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 0.5 * 24 * 60 * 60 * 1000).toISOString(),
+        user: {
+          id: '550e8400-e29b-41d4-a716-446655440003',
+          full_name: 'Team Lead',
+          email: 'lead@company.com',
+          role: 'Head'
         }
       }
     ]

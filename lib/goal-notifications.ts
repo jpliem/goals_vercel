@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase-client'
 
-export type NotificationType = 'task_assigned' | 'task_completed' | 'comment' | 'status_change' | 'task_due_soon' | 'task_overdue' | 'support_requested' | 'department_activity'
+export type NotificationType = 'task_assigned' | 'task_completed' | 'comment' | 'comment_reply' | 'status_change' | 'task_due_soon' | 'task_overdue' | 'support_requested' | 'department_activity'
 
 interface NotificationData {
   userId: string
@@ -31,6 +31,30 @@ async function getDepartmentHeads(department: string): Promise<string[]> {
 }
 
 // Simple notification system for goal management
+// Helper function to find original commenter from parent comment ID
+async function findOriginalCommenter(goalId: string, parentCommentId: string): Promise<string | null> {
+  if (!supabaseAdmin || !parentCommentId) return null
+  
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('goal_comments')
+      .select('user_id')
+      .eq('id', parentCommentId)
+      .eq('goal_id', goalId)
+      .single()
+    
+    if (error) {
+      console.error('Error finding original commenter:', error)
+      return null
+    }
+    
+    return (data?.user_id as string) || null
+  } catch (error) {
+    console.error('Error finding original commenter:', error)
+    return null
+  }
+}
+
 export async function createNotificationsForGoalAction(
   goal: any,
   workflowEntry: any,
@@ -44,6 +68,14 @@ export async function createNotificationsForGoalAction(
   try {
     // Get all goal assignees and relevant users to notify
     const usersToNotify = new Set<string>()
+    
+    // For reply notifications, add the original commenter
+    if (workflowEntry.action === 'comment_reply' && workflowEntry.parent_comment_id) {
+      const originalCommenter = await findOriginalCommenter(goal.id, workflowEntry.parent_comment_id)
+      if (originalCommenter && originalCommenter !== currentUserId) {
+        usersToNotify.add(originalCommenter)
+      }
+    }
     
     // Add goal owner (unless they are the current user)
     if (goal.owner_id && goal.owner_id !== currentUserId) {
@@ -100,7 +132,15 @@ export async function createNotificationsForGoalAction(
         break
       case 'comment_added':
         title = 'New Comment Added'
-        description = `New comment added to goal "${goal.subject}"`
+        description = workflowEntry.comment_preview 
+          ? `New comment on goal "${goal.subject}": "${workflowEntry.comment_preview}"`
+          : `New comment added to goal "${goal.subject}"`
+        break
+      case 'comment_reply':
+        title = 'Comment Reply'
+        description = workflowEntry.comment_preview
+          ? `Reply to your comment on goal "${goal.subject}": "${workflowEntry.comment_preview}"`
+          : `Someone replied to your comment on goal "${goal.subject}"`
         break
       case 'assignees_updated':
         title = 'Goal Assignment Updated'

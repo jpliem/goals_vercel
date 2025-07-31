@@ -29,8 +29,33 @@ import {
 import { FocusIndicator } from "@/components/ui/focus-indicator"
 import { GoalDetailModal } from "@/components/modals/goal-detail-modal"
 import { GoalAIAnalysisModal } from "@/components/modals/goal-ai-analysis-modal"
+import { Markdown } from "@/components/ui/markdown"
 import type { GoalWithDetails, UserRecord } from "@/lib/goal-database"
 import { getGoalAIAnalysis } from "@/actions/goals"
+
+// Utility function to truncate description to first paragraph or max characters
+function truncateDescription(description: string, maxChars: number = 200): string {
+  if (!description) return ""
+  
+  // First, try to get the first paragraph (split by double newlines)
+  const firstParagraph = description.split(/\n\s*\n/)[0]
+  
+  // If first paragraph is short enough, return it
+  if (firstParagraph.length <= maxChars) {
+    return firstParagraph
+  }
+  
+  // Otherwise, truncate to maxChars and add ellipsis
+  const truncated = description.substring(0, maxChars)
+  const lastSpaceIndex = truncated.lastIndexOf(' ')
+  
+  // Truncate at last complete word
+  if (lastSpaceIndex > maxChars * 0.8) {
+    return truncated.substring(0, lastSpaceIndex) + '...'
+  }
+  
+  return truncated + '...'
+}
 
 interface PDCABoardProps {
   goals: GoalWithDetails[]
@@ -873,9 +898,12 @@ export function PDCABoard({ goals, userProfile, className = "", userDepartmentPe
                             {goal.description && (
                               <div>
                                 <h5 className="text-sm font-medium text-gray-900 mb-1">Description</h5>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                  {goal.description}
-                                </p>
+                                <div className="text-sm text-gray-700 leading-relaxed">
+                                  <Markdown 
+                                    content={truncateDescription(goal.description, 200)} 
+                                    variant="compact"
+                                  />
+                                </div>
                               </div>
                             )}
                             

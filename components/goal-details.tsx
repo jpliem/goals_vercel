@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { parseComment, buildCommentThreads } from "@/lib/comment-utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -66,6 +67,8 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
   const [newComment, setNewComment] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState("")
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -168,8 +171,9 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
     }
   }
 
-  const handleAddComment = async () => {
-    if (!newComment.trim()) {
+  const handleAddComment = async (parentId?: string) => {
+    const commentText = parentId ? replyText : newComment
+    if (!commentText.trim()) {
       setError("Comment cannot be empty")
       return
     }
@@ -178,12 +182,18 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
     setError(null)
 
     try {
-      const result = await addGoalCommentAction(goal.id, newComment.trim())
+      const result = await addGoalCommentAction(goal.id, commentText.trim(), parentId)
       
       if (result.error) {
         setError(result.error as string)
       } else {
-        setNewComment("")
+        // Clear the appropriate input field
+        if (parentId) {
+          setReplyText("")
+          setReplyingTo(null)
+        } else {
+          setNewComment("")
+        }
         onDataRefresh?.()
       }
     } catch (error) {
@@ -643,8 +653,9 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                       <div className="max-h-96 overflow-y-auto">
                         {goal.comments && goal.comments.length > 0 ? (
                           <div className="space-y-4 pr-2">
-                            {goal.comments.map((comment: any, index: number) => (
-                              <div key={comment.id}>
+                            {buildCommentThreads(goal.comments).map((comment: any) => (
+                              <div key={comment.id} className="space-y-3">
+                                {/* Top-level comment */}
                                 <div className="border-l-4 border-blue-200 pl-4 py-4 bg-gray-50 rounded-r-lg">
                                   <div className="flex items-start gap-3">
                                     {/* User Avatar */}
@@ -664,17 +675,100 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                                       </div>
                                       <div className="text-sm text-gray-700">
                                         <Markdown 
-                                          content={comment.comment} 
+                                          content={comment.text} 
                                           variant="compact"
                                         />
                                       </div>
+                                      
+                                      {/* Reply button */}
+                                      {canComment && (
+                                        <div className="mt-3 flex items-center gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                                            className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700"
+                                          >
+                                            {replyingTo === comment.id ? 'Cancel' : 'Reply'} 
+                                            {comment.replyCount && comment.replyCount > 0 && (
+                                              <span className="ml-1">({comment.replyCount})</span>
+                                            )}
+                                          </Button>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Inline reply form */}
+                                      {replyingTo === comment.id && (
+                                        <div className="mt-3 space-y-2">
+                                          <Textarea
+                                            placeholder="Write a reply..."
+                                            value={replyText}
+                                            onChange={(e) => setReplyText(e.target.value)}
+                                            rows={2}
+                                            className="text-sm resize-none"
+                                          />
+                                          <div className="flex justify-end gap-2">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                setReplyingTo(null)
+                                                setReplyText("")
+                                              }}
+                                              className="h-7 px-2 text-xs"
+                                            >
+                                              Cancel
+                                            </Button>
+                                            <Button
+                                              onClick={() => handleAddComment(comment.id)}
+                                              disabled={isLoading || !replyText.trim()}
+                                              size="sm"
+                                              className="h-7 px-2 text-xs"
+                                            >
+                                              {isLoading ? 'Replying...' : 'Reply'}
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
-                                {/* Separator line between comments */}
-                                {index < (goal.comments?.length || 0) - 1 && (
-                                  <hr className="border-gray-200 mt-4" />
+                                
+                                {/* Replies */}
+                                {comment.replies && comment.replies.length > 0 && (
+                                  <div className="ml-8 space-y-2">
+                                    {comment.replies.map((reply: any) => (
+                                      <div key={reply.id} className="border-l-2 border-gray-300 pl-3 py-3 bg-gray-25 rounded-r">
+                                        <div className="flex items-start gap-2">
+                                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-xs font-medium text-gray-600">
+                                              {(reply.user?.full_name || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                            </span>
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="font-medium text-xs text-gray-800">
+                                                ↳ {reply.user?.full_name || 'Unknown User'}
+                                              </span>
+                                              <span className="text-xs text-gray-500">
+                                                {new Date(reply.created_at).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <div className="text-xs text-gray-600">
+                                              <Markdown 
+                                                content={reply.text} 
+                                                variant="compact"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
+                                
+                                {/* Separator line between comment threads */}
+                                <hr className="border-gray-200" />
                               </div>
                             ))}
                           </div>
@@ -707,7 +801,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                           </div>
                           <div className="flex justify-end">
                             <Button 
-                              onClick={handleAddComment}
+                              onClick={() => handleAddComment()}
                               disabled={isLoading || !newComment.trim()}
                               size="sm"
                               className="px-4"

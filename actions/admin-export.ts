@@ -227,14 +227,22 @@ export async function exportGoalsToExcel(filters?: GoalExportFilters, options?: 
 
     // Comments sheet
     if (options?.comments && comments.length > 0) {
-      const commentsSheetData = comments.map(comment => ({
-        'Comment ID': comment.id,
-        'Goal ID': comment.goal_id,
-        'Author': comment.user?.full_name || comment.user?.email || 'Unknown',
-        'Comment': comment.comment,
-        'Is Private': comment.is_private ? 'Yes' : 'No',
-        'Created': new Date(comment.created_at).toLocaleDateString()
-      }))
+      // Import comment parsing utility
+      const { parseComment } = await import('@/lib/comment-utils')
+      
+      const commentsSheetData = comments.map(comment => {
+        const parsed = parseComment(comment)
+        return {
+          'Comment ID': comment.id,
+          'Goal ID': comment.goal_id,
+          'Author': comment.user?.full_name || comment.user?.email || 'Unknown',
+          'Comment': parsed.text,
+          'Is Reply': parsed.isReply ? 'Yes' : 'No',
+          'Parent Comment ID': parsed.parent_id || '',
+          'Is Private': comment.is_private ? 'Yes' : 'No',
+          'Created': new Date(comment.created_at).toLocaleDateString()
+        }
+      })
       const commentsSheet = XLSX.utils.json_to_sheet(commentsSheetData)
       XLSX.utils.book_append_sheet(workbook, commentsSheet, 'Comments')
     }

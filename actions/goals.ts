@@ -297,7 +297,7 @@ export async function createGoal(formData: FormData) {
   return { success: true, data }
 }
 
-export async function addGoalComment(goalId: string, comment: string) {
+export async function addGoalComment(goalId: string, comment: string, parentId?: string) {
   try {
     const user = await requireAuth()
 
@@ -305,7 +305,19 @@ export async function addGoalComment(goalId: string, comment: string) {
       return { error: "Comment cannot be empty" }
     }
 
-    const { data, error } = await dbAddGoalComment(goalId, comment, user.id)
+    // Import comment formatting utility
+    const { formatCommentForStorage, validateCommentText } = await import('@/lib/comment-utils')
+    
+    // Validate comment text
+    const validation = validateCommentText(comment)
+    if (!validation.valid) {
+      return { error: validation.error }
+    }
+
+    // Format comment with threading prefix if it's a reply
+    const formattedComment = formatCommentForStorage(comment, parentId)
+
+    const { data, error } = await dbAddGoalComment(goalId, formattedComment, user.id)
 
     if (error) {
       console.error("Add goal comment error:", error)
@@ -316,11 +328,18 @@ export async function addGoalComment(goalId: string, comment: string) {
     try {
       const updatedGoal = await getGoalById(goalId)
       if (updatedGoal.data) {
+        // Determine if this is a reply or regular comment
+        const { parseComment } = await import('@/lib/comment-utils')
+        const parsedComment = parseComment({ comment: formattedComment })
+        const isReply = parsedComment.isReply
+        
         const workflowEntry = {
-          action: "comment",
+          action: isReply ? "comment_reply" : "comment_added",
           user_id: user.id,
           timestamp: new Date().toISOString(),
-          comment: comment
+          comment: comment, // Original clean comment text
+          parent_comment_id: parentId || null,
+          comment_preview: comment.substring(0, 100) + (comment.length > 100 ? '...' : '')
         }
         await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
       }

@@ -1,4 +1,5 @@
 // AI prompt building utilities (non-server actions)
+import { parseComment } from './comment-utils'
 
 // Helper function to build pure goal data without analysis instructions
 export function buildPureGoalData(goalData: any): string {
@@ -28,9 +29,11 @@ ${goalData.tasks?.map((task: any, index: number) =>
 ).join('\n') || 'No tasks defined'}
 
 Comments & Updates (${goalData.comments?.length || 0}):
-${goalData.comments?.map((comment: any, index: number) => 
-  `${index + 1}. ${comment.user?.full_name || 'Unknown'} (${new Date(comment.created_at).toLocaleDateString()}): ${comment.comment}`
-).join('\n') || 'No comments'}
+${goalData.comments?.map((comment: any, index: number) => {
+  const parsed = parseComment(comment)
+  const indent = parsed.isReply ? '  → ' : ''
+  return `${index + 1}. ${indent}${comment.user?.full_name || 'Unknown'} (${new Date(comment.created_at).toLocaleDateString()}): ${parsed.text}`
+}).join('\n') || 'No comments'}
 
 Team:
 - Owner: ${goalData.owner?.full_name || 'Unknown'}
@@ -67,9 +70,11 @@ ${goalData.tasks?.map((task: any, index: number) =>
 ).join('\n') || 'No tasks defined'}
 
 Comments & Updates (${goalData.comments?.length || 0}):
-${goalData.comments?.map((comment: any, index: number) => 
-  `${index + 1}. ${comment.user?.full_name || 'Unknown'} (${new Date(comment.created_at).toLocaleDateString()}): ${comment.comment}`
-).join('\n') || 'No comments'}
+${goalData.comments?.map((comment: any, index: number) => {
+  const parsed = parseComment(comment)
+  const indent = parsed.isReply ? '  → ' : ''
+  return `${index + 1}. ${indent}${comment.user?.full_name || 'Unknown'} (${new Date(comment.created_at).toLocaleDateString()}): ${parsed.text}`
+}).join('\n') || 'No comments'}
 
 Team:
 - Owner: ${goalData.owner?.full_name || 'Unknown'}
