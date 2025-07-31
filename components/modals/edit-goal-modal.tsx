@@ -6,10 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Markdown } from "@/components/ui/markdown"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Edit, Eye } from "lucide-react"
 import { updateGoal } from "@/actions/goals"
 import { Goal } from "@/lib/goal-database"
 
@@ -69,37 +66,18 @@ export function EditGoalModal({ isOpen, onClose, goal, onUpdate }: EditGoalModal
 
           <div>
             <Label htmlFor="description">Description</Label>
-            <Tabs defaultValue="edit" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="edit" className="flex items-center gap-1">
-                  <Edit className="h-3 w-3" />
-                  Write
-                </TabsTrigger>
-                <TabsTrigger value="preview" className="flex items-center gap-1">
-                  <Eye className="h-3 w-3" />
-                  Preview
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="edit" className="mt-2">
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe what you want to achieve... (Markdown supported)"
-                  rows={4}
-                  required
-                />
-              </TabsContent>
-              <TabsContent value="preview" className="mt-2">
-                <div className="min-h-[100px] p-3 border rounded-md bg-gray-50">
-                  {formData.description ? (
-                    <Markdown content={formData.description} variant="compact" />
-                  ) : (
-                    <p className="text-gray-500 text-sm italic">Nothing to preview yet...</p>
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Describe what you want to achieve..."
+              rows={4}
+              required
+              className="mt-2"
+            />
+            <div className="flex justify-end mt-1">
+              <span className="text-xs text-gray-400">{formData.description.length}/2000</span>
+            </div>
           </div>
 
           <div>

@@ -380,12 +380,15 @@ export function GoalDetailModal({ goal, userProfile, isOpen, onClose, onRefresh,
             <div>
               <DialogTitle className="text-lg font-semibold">{localGoal.subject}</DialogTitle>
               <DialogDescription className="text-sm text-gray-600 mt-1">
-                {localGoal.goal_type} Goal • {localGoal.department}
+                {localGoal.department}
               </DialogDescription>
             </div>
             
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 bg-blue-50">
+                  {localGoal.goal_type}
+                </Badge>
                 <Badge className={`${getStatusColor(localGoal.status)} text-xs`}>
                   {localGoal.status}
                 </Badge>

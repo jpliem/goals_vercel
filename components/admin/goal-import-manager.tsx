@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,9 +18,13 @@ import {
   Download,
   Eye,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  UserCheck
 } from "lucide-react"
 import { importGoals } from "@/actions/admin-import"
+import { getUsers } from "@/lib/goal-database"
+import type { UserRecord } from "@/lib/database"
+import * as XLSX from 'xlsx'
 
 interface GoalImportManagerProps {
   className?: string
@@ -55,6 +59,8 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [importForUserId, setImportForUserId] = useState<string>("current-user") // "current-user" means current user
   
   // Import options
   const [importMode, setImportMode] = useState('create_only')
@@ -70,11 +76,37 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
     generateTasks: false
   })
 
+  // Fetch eligible users on mount
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const result = await getUsers()
+        if (result.data) {
+          // Filter to only show users who can create goals (Head and Admin roles)
+          const eligibleUsers = result.data.filter(user => 
+            user.role === 'Admin' || user.role === 'Head'
+          ) as UserRecord[]
+          setUsers(eligibleUsers)
+        }
+      } catch (error) {
+        console.error('Failed to fetch users:', error)
+        toast.error('Failed to load users')
+      }
+    }
+    fetchUsers()
+  }, [])
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-        toast.error('Please select a CSV file')
+      const fileName = file.name.toLowerCase()
+      const isValidType = file.type === 'text/csv' || 
+                         file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                         fileName.endsWith('.csv') || 
+                         fileName.endsWith('.xlsx')
+      
+      if (!isValidType) {
+        toast.error('Please select a CSV or Excel (.xlsx) file')
         return
       }
       if (file.size > 10 * 1024 * 1024) { // 10MB limit
@@ -101,6 +133,9 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
       formData.append('validationLevel', validationLevel)
       formData.append('options', JSON.stringify(importOptions))
       formData.append('previewOnly', 'true')
+      if (importForUserId && importForUserId !== 'current-user') {
+        formData.append('importForUserId', importForUserId)
+      }
 
       const result = await importGoals(formData)
       
@@ -146,6 +181,9 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
       formData.append('mode', importMode)
       formData.append('validationLevel', validationLevel)
       formData.append('options', JSON.stringify(importOptions))
+      if (importForUserId && importForUserId !== 'current-user') {
+        formData.append('importForUserId', importForUserId)
+      }
 
       const result = await importGoals(formData)
       
@@ -181,20 +219,77 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
   }
 
   const downloadTemplate = () => {
-    const csvContent = `subject,description,priority,department,teams,goal_type,owner_email,assignee_emails,start_date,target_date,target_metrics,success_criteria
-"Q4 Sales Goals","Increase quarterly sales by 15%","High","Sales","ABB,Siemens","Department","john@company.com","jane@company.com,bob@company.com","2024-01-01","2024-03-31","15% revenue increase","Achieve $1M in sales"
-"Website Redesign","Modernize company website","Medium","Marketing","Marketing","Team","sarah@company.com","mike@company.com","2024-02-01","2024-05-31","New website launch","User engagement +25%"`
+    // Create sample data for the template
+    const templateData = [
+      {
+        subject: "Q4 Sales Goals",
+        description: "Increase quarterly sales by 15%",
+        priority: "High",
+        department: "Sales",
+        teams: "ABB,Siemens",
+        goal_type: "Department",
+        owner_email: "john@company.com",
+        assignee_emails: "jane@company.com,bob@company.com",
+        start_date: "2024-01-01",
+        target_date: "2024-03-31",
+        target_metrics: "15% revenue increase",
+        success_criteria: "Achieve $1M in sales"
+      },
+      {
+        subject: "Website Redesign",
+        description: "Modernize company website",
+        priority: "Medium",
+        department: "Marketing",
+        teams: "Marketing",
+        goal_type: "Team",
+        owner_email: "sarah@company.com",
+        assignee_emails: "mike@company.com",
+        start_date: "2024-02-01",
+        target_date: "2024-05-31",
+        target_metrics: "New website launch",
+        success_criteria: "User engagement +25%"
+      }
+    ]
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(templateData)
     
-    const blob = new Blob([csvContent], { type: 'text/csv' })
+    // Set column widths for better readability
+    const colWidths = [
+      { wch: 20 }, // subject
+      { wch: 30 }, // description
+      { wch: 10 }, // priority
+      { wch: 15 }, // department
+      { wch: 20 }, // teams
+      { wch: 12 }, // goal_type
+      { wch: 25 }, // owner_email
+      { wch: 35 }, // assignee_emails
+      { wch: 12 }, // start_date
+      { wch: 12 }, // target_date
+      { wch: 25 }, // target_metrics
+      { wch: 25 }  // success_criteria
+    ]
+    ws['!cols'] = colWidths
+
+    // Add the worksheet to the workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Goal Import Template")
+    
+    // Generate Excel file
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    const blob = new Blob([buffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    })
+    
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'goal_import_template.csv'
+    link.download = 'goal_import_template.xlsx'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    toast.success('Template downloaded successfully')
+    toast.success('Excel template downloaded successfully')
   }
 
   return (
@@ -202,10 +297,10 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Target className="w-5 h-5 text-blue-600" />
-          Import Goals from CSV
+          Import Goals from CSV/Excel
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Import goals in bulk from CSV files with validation and preview capabilities.
+          Import goals in bulk from CSV or Excel files with validation and preview capabilities.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -238,7 +333,7 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
                 ref={fileInputRef}
                 id="file_input"
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx"
                 onChange={handleFileSelect}
                 className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
@@ -302,6 +397,47 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Import For User Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="import_for_user">
+              Import For (Optional)
+              <span className="text-xs text-muted-foreground ml-2">
+                Only users with goal creation permissions are shown
+              </span>
+            </Label>
+            <Select value={importForUserId} onValueChange={setImportForUserId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Import as current user (default)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current-user">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    <span>Import as current user (default)</span>
+                  </div>
+                </SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    <div className="space-y-1">
+                      <div className="font-medium">
+                        {user.full_name || user.email}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {user.email} • {user.role} • {user.department || 'No Department'}
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {importForUserId && importForUserId !== 'current-user' && (
+              <p className="text-xs text-amber-600 flex items-start gap-1 mt-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                Goals will be imported on behalf of the selected user
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -442,6 +578,20 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
 
             {importPreview && (
               <div className="space-y-4">
+                {/* Import For User Notice */}
+                {importForUserId && importForUserId !== 'current-user' && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm text-amber-800">
+                      <UserCheck className="w-4 h-4" />
+                      <span className="font-medium">Import Target:</span>
+                      <span>
+                        {users.find(u => u.id === importForUserId)?.full_name || 
+                         users.find(u => u.id === importForUserId)?.email || 
+                         'Selected User'}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {/* Summary Stats */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-blue-50 p-3 rounded-lg text-center">
@@ -540,9 +690,14 @@ export function GoalImportManager({ className = "" }: GoalImportManagerProps) {
         <div className="bg-muted/50 rounded-lg p-4">
           <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4" />
-            CSV Format Requirements
+            File Format Requirements
           </h4>
           <div className="space-y-2 text-sm text-muted-foreground">
+            <div>
+              <p className="font-medium">Supported formats:</p>
+              <p className="ml-2">• CSV (.csv) - Comma-separated values</p>
+              <p className="ml-2">• Excel (.xlsx) - Excel 2007+ format</p>
+            </div>
             <div>
               <p className="font-medium">Required columns:</p>
               <p className="ml-2">• subject, description, department, owner_email</p>

@@ -1232,62 +1232,81 @@ export async function createUserFromSession(sessionUser: any) {
 export async function getUsers() {
   try {
     if (!supabaseAdmin) {
+      console.log('🔧 Using mock data (no Supabase connection)')
       // Return mock users for development
-      return { 
-        data: [
-          {
-            id: '550e8400-e29b-41d4-a716-446655440001',
-            email: 'admin@company.com',
-            full_name: 'System Administrator',
-            password: 'admin123',
-            role: 'Admin',
-            department: 'IT',
-            team: 'Development',
-            skills: ['System Administration', 'Project Management'],
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          {
-            id: '550e8400-e29b-41d4-a716-446655440002',
-            email: 'manager@company.com',
-            full_name: 'Department Manager',
-            password: 'manager123',
-            role: 'Employee' as const,
-            department: 'Customer Service',
-            team: 'Support',
-            skills: ['Leadership', 'Process Improvement'],
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          {
-            id: '550e8400-e29b-41d4-a716-446655440003',
-            email: 'user@company.com',
-            full_name: 'Regular User',
-            password: 'user123',
-            role: 'Employee',
-            department: 'HR',
-            team: null,
-            skills: ['Training', 'Communication'],
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ], 
-        error: null 
-      }
+      const mockData = [
+        {
+          id: '550e8400-e29b-41d4-a716-446655440001',
+          email: 'admin@company.com',
+          full_name: 'System Administrator',
+          password: 'admin123',
+          role: 'Admin',
+          department: 'IT',
+          team: 'Development',
+          skills: ['System Administration', 'Project Management'],
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          email: 'manager@company.com',
+          full_name: 'Department Manager',
+          password: 'manager123',
+          role: 'Employee' as const,
+          department: 'Customer Service',
+          team: 'Support',
+          skills: ['Leadership', 'Process Improvement'],
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: '550e8400-e29b-41d4-a716-446655440003',
+          email: 'user@company.com',
+          full_name: 'Regular User',
+          password: 'user123',
+          role: 'Employee',
+          department: 'HR',
+          team: null,
+          skills: ['Training', 'Communication'],
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ]
+      console.log('📊 Mock data users:', mockData)
+      return { data: mockData, error: null }
     }
 
+    console.log('🔍 Fetching users from Supabase database...')
     const { data, error } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("is_active", true)
       .order("full_name")
 
+    console.log('📊 Database query result:', { 
+      dataCount: data?.length || 0, 
+      error: error?.message || 'none',
+      sampleUser: data?.[0] ? {
+        name: data[0].full_name,
+        email: data[0].email,
+        role: data[0].role,
+        active: data[0].is_active
+      } : 'none'
+    })
+    
+    if (data && data.length > 0) {
+      console.log('👥 All users from database:')
+      data.forEach((user: any, index: number) => {
+        console.log(`   ${index + 1}. ${user.full_name || user.email} - Role: ${user.role} - Active: ${user.is_active}`)
+      })
+    }
+
     return { data, error }
   } catch (error) {
-    console.error("Get users error:", error)
+    console.error("❌ Get users error:", error)
     return { data: [], error: error }
   }
 }

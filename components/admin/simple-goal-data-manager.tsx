@@ -1,12 +1,16 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Target, Upload, Download, CheckCircle, AlertCircle, FileSpreadsheet } from "lucide-react"
+import { Target, Upload, Download, CheckCircle, AlertCircle, FileSpreadsheet, UserCheck } from "lucide-react"
 import { exportGoals, importGoals, generateGoalTemplate } from "@/actions/simple-data-management"
+import { getUsers } from "@/lib/goal-database"
+import type { UserRecord } from "@/lib/database"
 
 interface SimpleGoalDataManagerProps {
   className?: string
@@ -17,6 +21,8 @@ export function SimpleGoalDataManager({ className = "" }: SimpleGoalDataManagerP
   const [isImporting, setIsImporting] = useState(false)
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [importForUserId, setImportForUserId] = useState<string>("current-user") // "current-user" means current user
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleExport = async () => {
@@ -85,6 +91,45 @@ export function SimpleGoalDataManager({ className = "" }: SimpleGoalDataManagerP
     }
   }
 
+  // Fetch eligible users on mount
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        console.log('🔍 Fetching users for import dropdown via API...')
+        const response = await fetch('/api/users')
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        console.log('📊 Raw user data from API:', result.data)
+        console.log('❓ Data type:', typeof result.data, 'Length:', result.data?.length)
+        
+        if (result.data) {
+          // Filter to only show users who can create goals (Head and Admin roles)
+          const eligibleUsers = result.data.filter((user: any) => {
+            console.log(`👤 User: ${user.full_name || user.email} - Role: ${user.role} - Active: ${user.is_active}`)
+            return user.role === 'Admin' || user.role === 'Head'
+          }) as UserRecord[]
+          console.log('✅ Eligible users (Admin/Head only):', eligibleUsers)
+          setUsers(eligibleUsers)
+        } else {
+          console.log('⚠️ No user data returned from API')
+        }
+        
+        if (result.error) {
+          console.error('❌ Error in API result:', result.error)
+          toast.error(`Error: ${result.error}`)
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch users via API:', error)
+        toast.error('Failed to load users')
+      }
+    }
+    fetchUsers()
+  }, [])
+
   const handleImportClick = () => {
     fileInputRef.current?.click()
   }
@@ -107,8 +152,9 @@ export function SimpleGoalDataManager({ className = "" }: SimpleGoalDataManagerP
       const arrayBuffer = await file.arrayBuffer()
       setImportProgress(30)
 
-      // Import goals
-      const result = await importGoals(arrayBuffer)
+      // Import goals (pass importForUserId if not current user)
+      const selectedUserId = importForUserId !== 'current-user' ? importForUserId : undefined
+      const result = await importGoals(arrayBuffer, selectedUserId)
       setImportProgress(80)
 
       if (result.error) {
@@ -187,7 +233,45 @@ export function SimpleGoalDataManager({ className = "" }: SimpleGoalDataManagerP
         </div>
         
         {/* Import Section */}
-        <div className="border-t pt-4 space-y-2">
+        <div className="border-t pt-4 space-y-3">
+          {/* Import For User Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="import_for_user" className="text-xs font-medium">
+              Import For (Optional)
+            </Label>
+            <Select value={importForUserId} onValueChange={setImportForUserId}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Import as current user (default)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current-user">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-3 h-3" />
+                    <span>Import as current user (default)</span>
+                  </div>
+                </SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    <div className="space-y-1">
+                      <div className="font-medium text-xs">
+                        {user.full_name || user.email}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {user.email} • {user.role} • {user.department || 'No Department'}
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {importForUserId && importForUserId !== 'current-user' && (
+              <p className="text-xs text-amber-600 flex items-start gap-1">
+                <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                Goals will be imported on behalf of the selected user
+              </p>
+            )}
+          </div>
+          
           <Button 
             variant="outline" 
             className="w-full"

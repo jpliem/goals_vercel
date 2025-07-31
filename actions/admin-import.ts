@@ -3,6 +3,7 @@
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { revalidatePath } from 'next/cache'
+import * as XLSX from 'xlsx'
 
 interface ImportOptions {
   skipDuplicateCheck: boolean
@@ -51,6 +52,24 @@ function parseCSV(content: string): any[] {
   }
   
   return rows
+}
+
+// Helper function to parse file (CSV or Excel)
+async function parseFile(file: File): Promise<any[]> {
+  const fileName = file.name.toLowerCase()
+  
+  if (fileName.endsWith('.xlsx')) {
+    // Parse Excel file
+    const arrayBuffer = await file.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: 'buffer' })
+    const sheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[sheetName]
+    return XLSX.utils.sheet_to_json(worksheet)
+  } else {
+    // Parse CSV file
+    const content = await file.text()
+    return parseCSV(content)
+  }
 }
 
 // Helper function to validate email format
@@ -205,17 +224,17 @@ export async function importGoals(formData: FormData) {
     const validationLevel = formData.get('validationLevel') as string
     const options: ImportOptions = JSON.parse(formData.get('options') as string)
     const previewOnly = formData.get('previewOnly') === 'true'
+    const importForUserId = formData.get('importForUserId') as string | null
 
     if (!file) {
       return { error: 'No file provided' }
     }
 
-    // Read file content
-    const content = await file.text()
-    const rows = parseCSV(content)
+    // Parse file content (CSV or Excel)
+    const rows = await parseFile(file)
 
     if (rows.length === 0) {
-      return { error: 'No valid data found in CSV file' }
+      return { error: 'No valid data found in file' }
     }
 
     // Get existing data for validation
@@ -234,6 +253,23 @@ export async function importGoals(formData: FormData) {
     const existingUsers = new Map(
       usersResult.data.map((u: any) => [u.email as string, u])
     )
+    
+    // Validate importForUserId if provided
+    if (importForUserId) {
+      const { data: targetUser, error: targetUserError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', importForUserId)
+        .single()
+        
+      if (targetUserError || !targetUser) {
+        return { error: 'Selected user not found' }
+      }
+      
+      if (targetUser.role !== 'Admin' && targetUser.role !== 'Head') {
+        return { error: 'Selected user does not have permission to create goals. Only Head and Admin users can create goals.' }
+      }
+    }
     
     const existingDepartments = new Set(departmentsResult as string[])
     
@@ -293,8 +329,15 @@ export async function importGoals(formData: FormData) {
     for (const [index, row] of validData.entries()) {
       try {
         // Get owner ID
-        const ownerUser = existingUsers.get(row.owner_email)
-        const ownerId = ownerUser?.id || user.id // Fallback to current user
+        let ownerId: string
+        if (importForUserId) {
+          // Use the selected user ID for all imports
+          ownerId = importForUserId
+        } else {
+          // Use the owner from CSV or fallback to current user
+          const ownerUser = existingUsers.get(row.owner_email)
+          ownerId = ownerUser?.id || user.id
+        }
 
         // Prepare goal data
         const goalData = {

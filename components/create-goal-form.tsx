@@ -15,9 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Markdown } from "@/components/ui/markdown"
-import { X, User, Users, Building, Globe, Plus, Trash2, Calendar, Clock, Eye, Edit } from "lucide-react"
+import { X, User, Users, Building, Globe, Plus, Trash2, Calendar, Clock } from "lucide-react"
 
 interface CreateGoalFormProps {
   users: UserRecord[]
@@ -394,38 +392,15 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                   <Label htmlFor="description" className="text-sm font-medium flex items-center gap-2">
                     📝 Goal Description *
                   </Label>
-                  <Tabs defaultValue="edit" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="edit" className="flex items-center gap-1">
-                        <Edit className="h-3 w-3" />
-                        Write
-                      </TabsTrigger>
-                      <TabsTrigger value="preview" className="flex items-center gap-1">
-                        <Eye className="h-3 w-3" />
-                        Preview
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="edit" className="mt-2">
-                      <Textarea
-                        id="description"
-                        value={formData.description}
-                        onChange={(e) => handleInputChange("description", e.target.value)}
-                        placeholder="Describe what you want to achieve and why it matters... (Markdown supported)"
-                        className={`${formData.description.length > 0 && formData.description.length < 10 ? 'border-orange-300 focus:border-orange-500' : formData.description.length >= 10 ? 'border-green-300 focus:border-green-500' : ''}`}
-                        rows={4}
-                        required
-                      />
-                    </TabsContent>
-                    <TabsContent value="preview" className="mt-2">
-                      <div className="min-h-[100px] p-3 border rounded-md bg-gray-50">
-                        {formData.description ? (
-                          <Markdown content={formData.description} variant="compact" />
-                        ) : (
-                          <p className="text-gray-500 text-sm italic">Nothing to preview yet...</p>
-                        )}
-                      </div>
-                    </TabsContent>
-                  </Tabs>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => handleInputChange("description", e.target.value)}
+                    placeholder="Describe what you want to achieve and why it matters..."
+                    className={`${formData.description.length > 0 && formData.description.length < 10 ? 'border-orange-300 focus:border-orange-500' : formData.description.length >= 10 ? 'border-green-300 focus:border-green-500' : ''}`}
+                    rows={4}
+                    required
+                  />
                   <div className="flex items-center justify-between">
                     {formData.description.length > 0 && formData.description.length < 10 ? (
                       <p className="text-xs text-orange-600">
@@ -434,9 +409,9 @@ export function CreateGoalForm({ users, userProfile, departmentTeamMappings, onS
                     ) : formData.description.length >= 10 ? (
                       <p className="text-xs text-green-600">✓ Good description length</p>
                     ) : (
-                      <p className="text-xs text-gray-500">Explain what you want to achieve (Markdown supported)</p>
+                      <p className="text-xs text-gray-500">Explain what you want to achieve</p>
                     )}
-                    <span className="text-xs text-gray-400">{formData.description.length}/500</span>
+                    <span className="text-xs text-gray-400">{formData.description.length}/2000</span>
                   </div>
                 </div>
               </div>

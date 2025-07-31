@@ -267,7 +267,7 @@ export async function exportGoals() {
   }
 }
 
-export async function importGoals(fileBuffer: ArrayBuffer) {
+export async function importGoals(fileBuffer: ArrayBuffer, importForUserId?: string) {
   try {
     const user = await requireAuth()
     
@@ -277,6 +277,23 @@ export async function importGoals(fileBuffer: ArrayBuffer) {
 
     if (!supabaseAdmin) {
       return { error: 'Database connection not available' }
+    }
+    
+    // Validate importForUserId if provided
+    if (importForUserId) {
+      const { data: targetUser, error: targetUserError } = await supabaseAdmin
+        .from('users')
+        .select('id, role')
+        .eq('id', importForUserId)
+        .single()
+        
+      if (targetUserError || !targetUser) {
+        return { error: 'Selected user not found' }
+      }
+      
+      if (targetUser.role !== 'Admin' && targetUser.role !== 'Head') {
+        return { error: 'Selected user does not have permission to create goals. Only Head and Admin users can create goals.' }
+      }
     }
 
     // Parse Excel file
@@ -335,7 +352,7 @@ export async function importGoals(fileBuffer: ArrayBuffer) {
       target_metrics: row.target_metrics || null,
       success_criteria: row.success_criteria || null,
       progress_percentage: 0, // Always start with 0% progress
-      owner_id: user.id, // Always set to importing user
+      owner_id: importForUserId || user.id, // Use selected user or fallback to current user
       workflow_history: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()

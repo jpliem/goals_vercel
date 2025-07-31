@@ -28,7 +28,8 @@ import {
   Settings,
   UserPlus,
   FileText,
-  Zap
+  Zap,
+  FileSpreadsheet
 } from "lucide-react"
 import Link from "next/link"
 
