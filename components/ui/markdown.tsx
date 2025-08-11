@@ -10,7 +10,7 @@ interface MarkdownProps {
 }
 
 export function Markdown({ content, className, variant = 'default' }: MarkdownProps) {
-  const baseClasses = "prose prose-sm max-w-none"
+  const baseClasses = "prose prose-sm max-w-none break-words"
   
   const variantClasses = {
     default: "prose-gray prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-50 prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:pl-4 prose-ul:text-gray-700 prose-ol:text-gray-700 prose-li:text-gray-700",
@@ -42,11 +42,11 @@ export function Markdown({ content, className, variant = 'default' }: MarkdownPr
           blockquote: ({ children }) => <blockquote className="mb-3 p-3 rounded-r border-l-4">{children}</blockquote>,
           code: ({ inline, children, ...props }: any) => {
             if (inline) {
-              return <code className="px-1 py-0.5 rounded text-xs font-mono">{children}</code>
+              return <code className="px-1 py-0.5 rounded text-xs font-mono break-words">{children}</code>
             }
             return (
-              <pre className="mb-3 p-3 rounded overflow-x-auto">
-                <code className="text-xs font-mono">{children}</code>
+              <pre className="mb-3 p-3 rounded overflow-x-auto whitespace-pre-wrap break-words max-w-full">
+                <code className="text-xs font-mono break-words">{children}</code>
               </pre>
             )
           },
@@ -63,7 +63,7 @@ export function Markdown({ content, className, variant = 'default' }: MarkdownPr
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 border-b border-gray-100">
+            <td className="px-3 py-2 whitespace-normal break-words text-sm text-gray-900 border-b border-gray-100">
               {children}
             </td>
           ),

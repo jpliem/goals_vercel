@@ -54,6 +54,10 @@ export function AIAnalysisTable() {
   const [analyzing, setAnalyzing] = useState<string | null>(null)
   const [generatingMetaSummary, setGeneratingMetaSummary] = useState(false)
   const [deletingAnalysis, setDeletingAnalysis] = useState<string | null>(null)
+  const [batching, setBatching] = useState(false)
+  const [batchProcessed, setBatchProcessed] = useState(0)
+  const [batchTotal, setBatchTotal] = useState(0)
+  const [clearingAll, setClearingAll] = useState(false)
   
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState("")
@@ -282,6 +286,61 @@ export function AIAnalysisTable() {
     }
   }
 
+  // Handle batch analyze all not-analyzed goals sequentially
+  const handleBatchAnalyzeAll = async () => {
+    const targets = goals.filter(g => !g.latest_analysis)
+    if (targets.length === 0) {
+      return
+    }
+
+    setBatching(true)
+    setBatchProcessed(0)
+    setBatchTotal(targets.length)
+    setError(null)
+
+    try {
+      const { generateAIAnalysis } = await import('@/actions/ollama-integration')
+      for (let i = 0; i < targets.length; i++) {
+        const g = targets[i]
+        setAnalyzing(g.id)
+        const res = await generateAIAnalysis(g.id, 'custom')
+        if (!res.success) {
+          setError(res.error || 'Batch analysis failed')
+          break
+        }
+        setBatchProcessed(i + 1)
+      }
+      await loadGoals()
+    } catch (err) {
+      setError('Failed during batch analysis. Please try again.')
+      console.error('Batch analyze error:', err)
+    } finally {
+      setAnalyzing(null)
+      setBatching(false)
+    }
+  }
+
+  // Handle clear all per-goal analyses
+  const handleClearAllAnalyses = async () => {
+    if (!confirm('This will delete AI analyses for all goals (meta-summaries kept). Continue?')) return
+    setClearingAll(true)
+    setError(null)
+
+    try {
+      const { clearAllGoalAnalyses } = await import('@/actions/ollama-integration')
+      const res = await clearAllGoalAnalyses()
+      if (!res.success) {
+        setError(res.error || 'Failed to clear analyses')
+      }
+      await loadGoals()
+    } catch (err) {
+      setError('Failed to clear analyses. Please try again.')
+      console.error('Clear all analyses error:', err)
+    } finally {
+      setClearingAll(false)
+    }
+  }
+
   // Filter and sort goals
   useEffect(() => {
     let filtered = [...goals]
@@ -379,6 +438,55 @@ export function AIAnalysisTable() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Bulk Actions */}
+      <div className="flex items-center justify-between bg-gray-50 border rounded-lg p-4">
+        <div className="text-sm text-gray-600">
+          {batching ? (
+            <span>Analyzing goals… {batchProcessed}/{batchTotal}</span>
+          ) : (
+            <span>
+              Not analyzed: {goals.filter(g => !g.latest_analysis).length} / {goals.length}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleBatchAnalyzeAll}
+            disabled={batching || clearingAll || goals.filter(g => !g.latest_analysis).length === 0}
+          >
+            {batching ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing…
+              </>
+            ) : (
+              <>
+                <Bot className="w-4 h-4 mr-2" />
+                Batch Analyze All
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleClearAllAnalyses}
+            disabled={clearingAll}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            {clearingAll ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Clearing…
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear All Analyses
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
       {/* Meta-Summaries Section */}
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">

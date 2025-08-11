@@ -12,7 +12,8 @@ import {
   Calendar,
   Copy
 } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { exportHtmlToPdf } from "@/lib/print-export"
 
 interface MetaSummaryModalProps {
   isOpen: boolean
@@ -31,6 +32,7 @@ interface MetaSummaryModalProps {
 
 export function MetaSummaryModal({ isOpen, onClose, summary }: MetaSummaryModalProps) {
   const [copied, setCopied] = useState(false)
+  const contentRef = useRef<HTMLDivElement | null>(null)
 
   const handleCopy = async () => {
     if (!summary) return
@@ -53,7 +55,7 @@ export function MetaSummaryModal({ isOpen, onClose, summary }: MetaSummaryModalP
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-purple-600" />
@@ -61,7 +63,7 @@ export function MetaSummaryModal({ isOpen, onClose, summary }: MetaSummaryModalP
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="space-y-6 pr-4">
             {/* Summary Metadata */}
             <div className="bg-purple-50 rounded-lg p-4">
@@ -124,11 +126,26 @@ export function MetaSummaryModal({ isOpen, onClose, summary }: MetaSummaryModalP
               </div>
               
               <div className="bg-white border rounded-lg p-6">
-                <Markdown 
-                  content={summary.analysis_result} 
-                  variant="analysis"
-                  className="text-sm"
-                />
+                <div className="flex items-center justify-end mb-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (contentRef.current) {
+                        exportHtmlToPdf(contentRef.current.innerHTML, 'Executive Meta-Summary')
+                      }
+                    }}
+                  >
+                    Export PDF
+                  </Button>
+                </div>
+                <div ref={contentRef} className="markdown-capture bg-white">
+                  <Markdown 
+                    content={summary.analysis_result} 
+                    variant="analysis"
+                    className="text-sm prose-pre:whitespace-pre-wrap prose-pre:break-words"
+                  />
+                </div>
               </div>
             </div>
 

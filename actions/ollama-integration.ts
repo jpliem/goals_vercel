@@ -28,6 +28,24 @@ interface AIConfigData {
   max_tokens?: number
 }
 
+// Helper: resolve session user to DB users.id
+async function getDbUserId(session: { email: string }): Promise<{ id: string | null; error?: string }> {
+  if (!supabaseAdmin) return { id: null, error: 'Database not available' }
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('email', session.email)
+    .maybeSingle()
+  if (error) {
+    return { id: null, error: 'Failed to resolve current user in database' }
+  }
+  const row = data as { id?: string } | null
+  if (!row?.id) {
+    return { id: null, error: 'Signed-in user email not found in users table' }
+  }
+  return { id: row.id as string }
+}
+
 // Fetch available models from Ollama instance
 export async function fetchOllamaModels(ollamaUrl: string): Promise<{ data: OllamaModel[] | null; error: string | null }> {
   try {
@@ -173,6 +191,12 @@ export async function saveAIConfiguration(config: AIConfigData): Promise<{ succe
       .update({ is_active: false })
       .neq('id', 'placeholder') // Update all rows
 
+    // Resolve DB user id for created_by
+    const createdBy = await getDbUserId(user)
+    if (!createdBy.id) {
+      return { success: false, error: createdBy.error || 'User not found in database' }
+    }
+
     // Insert or update the configuration
     const { data, error } = await supabaseAdmin
       .from('ai_configurations')
@@ -186,7 +210,7 @@ export async function saveAIConfiguration(config: AIConfigData): Promise<{ succe
         temperature: config.temperature || 0.7,
         max_tokens: config.max_tokens || 1000,
         is_active: true,
-        created_by: user.id,
+        created_by: createdBy.id,
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'name'
@@ -328,6 +352,12 @@ export async function generateAIAnalysis(
       return { success: false, error: "Database not available" }
     }
 
+    // Resolve DB user id for requested_by
+    const requestedBy = await getDbUserId(user)
+    if (!requestedBy.id) {
+      return { success: false, error: requestedBy.error || 'User not found in database' }
+    }
+
     // Get active AI configuration
     const configResult = await getActiveAIConfiguration()
     if (!configResult.data) {
@@ -405,7 +435,7 @@ export async function generateAIAnalysis(
       confidence_score: null, // Ollama doesn't provide confidence scores
       tokens_used: (result.prompt_eval_count || 0) + (result.eval_count || 0),
       processing_time_ms: endTime - startTime,
-      requested_by: user.id,
+      requested_by: requestedBy.id,
       created_at: new Date().toISOString()
     }
 
@@ -450,6 +480,112 @@ export async function generateAIAnalysis(
     }
     
     return { success: false, error: "Failed to generate AI analysis" }
+  }
+}
+
+// Batch generate AI analyses for all goals missing analysis (sequential)
+export async function batchGenerateAIAnalyses(): Promise<{ success: boolean; error?: string; processed?: number }> {
+  try {
+    const user = await requireAuth()
+
+    if (!supabaseAdmin) {
+      return { success: false, error: "Database not available" }
+    }
+
+    if ((user as any).role !== 'Admin') {
+      return { success: false, error: 'Admin access required' }
+    }
+
+    // Ensure there is an active configuration first
+    const configResult = await getActiveAIConfiguration()
+    if (!configResult.data) {
+      return { success: false, error: "No active AI configuration found. Configure AI settings first." }
+    }
+
+    // Fetch all goals and latest analyses
+    const { data: goals, error: goalsError } = await supabaseAdmin
+      .from('goals')
+      .select('id')
+
+    if (goalsError || !goals) {
+      return { success: false, error: "Failed to fetch goals" }
+    }
+
+    const { data: analyses, error: analysisError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select('goal_id')
+      .not('goal_id', 'is', null)
+
+    if (analysisError) {
+      return { success: false, error: "Failed to fetch existing analyses" }
+    }
+
+    const goalList = (goals as Array<{ id: string }>)
+    const analyzedGoalIds = new Set(((analyses as Array<{ goal_id: string }>) || []).map(a => a.goal_id))
+    const toProcess = goalList.filter(g => !analyzedGoalIds.has(g.id))
+
+    let processed = 0
+    for (const g of toProcess) {
+      const res = await generateAIAnalysis(g.id, 'custom')
+      if (!res.success) {
+        // Stop on first hard failure to surface error to UI
+        return { success: false, error: res.error || "Analysis failed" , processed }
+      }
+      processed += 1
+    }
+
+    revalidatePath("/admin/ai-analysis")
+    return { success: true, processed }
+  } catch (error) {
+    console.error('Error in batchGenerateAIAnalyses:', error)
+    return { success: false, error: 'Failed to batch analyze goals' }
+  }
+}
+
+// Clear all per-goal analyses (keeps meta-summaries)
+export async function clearAllGoalAnalyses(): Promise<{ success: boolean; error?: string; deleted?: number }> {
+  try {
+    const user = await requireAuth()
+
+    if (!supabaseAdmin) {
+      return { success: false, error: "Database not available" }
+    }
+
+    if ((user as any).role !== 'Admin') {
+      return { success: false, error: 'Admin access required' }
+    }
+
+    // Collect IDs to delete to report count
+    const { data: rows, error: fetchError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .select('id')
+      .not('goal_id', 'is', null)
+      .not('analysis_type', 'eq', 'meta_summary')
+
+    if (fetchError) {
+      return { success: false, error: 'Failed to fetch analyses' }
+    }
+
+    const ids = (rows || []).map(r => r.id)
+    if (ids.length === 0) {
+      return { success: true, deleted: 0 }
+    }
+
+    const { error: delError } = await supabaseAdmin
+      .from('goal_ai_analysis')
+      .delete()
+      .in('id', ids as any)
+
+    if (delError) {
+      console.error('Error clearing analyses:', delError)
+      return { success: false, error: 'Failed to clear analyses' }
+    }
+
+    revalidatePath("/admin/ai-analysis")
+    return { success: true, deleted: ids.length }
+  } catch (error) {
+    console.error('Error in clearAllGoalAnalyses:', error)
+    return { success: false, error: 'Failed to clear all analyses' }
   }
 }
 
@@ -516,7 +652,12 @@ export async function deleteAIAnalysis(analysisId: string): Promise<{ success: b
     }
 
     // User can delete their own analyses, or admins can delete any
-    if (analysis.requested_by !== user.id && user.role !== 'Admin') {
+    const dbUser = await getDbUserId(user)
+    if (!dbUser.id) {
+      return { success: false, error: dbUser.error || 'User not found in database' }
+    }
+
+    if (analysis.requested_by !== dbUser.id && user.role !== 'Admin') {
       return { success: false, error: "Permission denied" }
     }
 
@@ -546,6 +687,12 @@ export async function generateMetaSummary(customPrompt?: string): Promise<{ succ
     
     if (!supabaseAdmin) {
       return { success: false, error: "Database not available" }
+    }
+
+    // Resolve DB user id for requested_by
+    const requestedBy = await getDbUserId(user)
+    if (!requestedBy.id) {
+      return { success: false, error: requestedBy.error || 'User not found in database' }
     }
 
     // Get active AI configuration
@@ -650,7 +797,7 @@ Focus on strategic, actionable insights for leadership decision-making.`
         confidence_score: null,
         tokens_used: (result.prompt_eval_count || 0) + (result.eval_count || 0),
         processing_time_ms: endTime - startTime,
-        requested_by: user.id
+        requested_by: requestedBy.id
       })
       .select('id')
       .single()
