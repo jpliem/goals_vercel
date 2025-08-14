@@ -567,6 +567,70 @@ export async function updateGoalStatus(goalId: string, status: string, currentAs
   }
 }
 
+// Admin/Head override: reopen a Completed goal back to Plan
+export async function reopenGoalToPlan(goalId: string, reason?: string) {
+  try {
+    const user = await requireAuth()
+
+    // Fetch the goal to validate status and permissions
+    const currentGoalResult = await getGoalById(goalId)
+    if (!currentGoalResult.data) {
+      return { error: "Goal not found" }
+    }
+
+    const goal = currentGoalResult.data
+
+    // Only Admins, or Heads of the same department, can reopen
+    const isAdmin = user.role === "Admin"
+    const isDeptHead = user.role === "Head" && goal.department === user.department
+    if (!isAdmin && !isDeptHead) {
+      return { error: "Only admins or department heads can reopen completed goals" }
+    }
+
+    // Must be Completed to reopen
+    if (goal.status !== "Completed") {
+      return { error: "Only completed goals can be reopened" }
+    }
+
+    // Create workflow entry noting the override
+    const workflowEntry = {
+      id: `history-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      user_id: user.id,
+      user_name: user.full_name || user.email,
+      action: "status_change" as const,
+      details: {
+        from_status: "Completed",
+        to_status: "Plan",
+        comment: reason || "Admin override: Reopen Completed to Plan"
+      }
+    }
+
+    const { data, error } = await dbUpdateGoalStatus(goalId, "Plan", undefined, workflowEntry, undefined)
+    if (error) {
+      console.error("Reopen goal error:", error)
+      return { error: "Failed to reopen goal" }
+    }
+
+    // Notifications for the override
+    try {
+      const updatedGoal = await getGoalById(goalId)
+      if (updatedGoal.data) {
+        await createNotificationsForGoalAction(updatedGoal.data, workflowEntry, user.id)
+      }
+    } catch (notificationError) {
+      console.error("Error creating reopen notifications:", notificationError)
+    }
+
+    revalidatePath(`/dashboard/goals/${goalId}`)
+    revalidatePath("/dashboard")
+    return { success: true, data }
+  } catch (error) {
+    console.error("Reopen goal error:", error)
+    return { error: "Authentication required" }
+  }
+}
+
 export async function updateGoalDetails(goalId: string, updates: {
   subject?: string
   description?: string
@@ -1283,4 +1347,3 @@ export async function getGoalAIAnalysis(goalId: string) {
     return { success: false, error: "Authentication required" }
   }
 }
-

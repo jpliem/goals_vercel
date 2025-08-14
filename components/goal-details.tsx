@@ -49,6 +49,7 @@ import {
   markGoalAssigneeTaskComplete,
   updateGoalDetails as updateGoalDetailsAction,
 } from "@/actions/goals"
+import { reopenGoalToPlan as reopenGoalToPlanAction } from "@/actions/goals"
 import { getGoalAttachments, deleteGoalAttachment, uploadMultipleGoalAttachments } from "@/actions/goal-attachments"
 import { FileUpload } from "@/components/ui/file-upload"
 import { GoalWorkflowHistory } from "@/components/goal-workflow-history"
@@ -103,6 +104,7 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                  (userProfile.role === "Head" && goal.department === userProfile.department) ||
                  isOwner
   const canComment = isOwner || isAnyAssignee || userProfile.role === "Admin" || userProfile.role === "Head"
+  const canAdminReopen = userProfile.role === "Admin" || (userProfile.role === "Head" && goal.department === userProfile.department)
 
   // Helper function to get PDCA status color
   const getStatusColor = (status: string) => {
@@ -237,6 +239,23 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
       }
     } catch (error) {
       setError("Failed to complete task")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleReopenToPlan = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const result = await reopenGoalToPlanAction(goal.id)
+      if (result.error) {
+        setError(result.error as string)
+      } else {
+        onDataRefresh?.()
+      }
+    } catch (e) {
+      setError("Failed to reopen goal")
     } finally {
       setIsLoading(false)
     }
@@ -551,6 +570,21 @@ export function GoalDetails({ goal, userProfile, users = [], onDataRefresh }: Go
                     </>
                   )}
                 </TooltipProvider>
+
+                {/* Admin/Head override for Completed goals */}
+                {goal.status === "Completed" && canAdminReopen && (
+                  <div className="ml-3">
+                    <Button 
+                      onClick={handleReopenToPlan}
+                      disabled={isLoading}
+                      variant="outline"
+                      size="sm"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                    >
+                      Reopen to Plan
+                    </Button>
+                  </div>
+                )}
                 
                 {canEdit && (
                   <div className="flex gap-2">
